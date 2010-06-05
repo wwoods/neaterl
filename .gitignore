@@ -1,0 +1,3 @@
+*.beam
+*_lex.erl
+*_yec.erl
