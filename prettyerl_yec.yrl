@@ -15,7 +15,7 @@ function_def
 arg_list arg_list2
 guard_expression
 expression uminus
-list
+list tuple
 func_call
 .
 
@@ -25,14 +25,16 @@ Terminals
 indent ','
 atom float integer variable string
 prep_module prep_export 
-'case' 'if' 'end' 'when'
+'case' 'of' 'if' 'end' 'when'
 'andalso' 'orelse' 'fun' 'not'
+'receive' 'after'
 .
 
 Rootsymbol module.
 
 Left 5 ';'.
 Left 10 ','.
+Left 15 '!'.
 Left 20 '='.
 Left 20 '=='.
 Left 20 '>'.
@@ -58,17 +60,22 @@ export_list2 -> export_func : [ '$1' ].
 export_list2 -> export_func seps export_list2 
   : [ '$1' ] ++ '$3' .
 
+statement_list -> indents : [].
 statement_list -> indents statement : [ { '$1', stmts_to_list('$2') } ].
 statement_list -> indents statement statement_list : [ { '$1', stmts_to_list('$2') } ] ++ '$3'.
 
 statement -> statement ',' statement : ['$1', '$3'].
 statement -> function_def : '$1'.
 statement -> function_def statement : ['$1', '$2'].
+statement -> expression '->' : { branch_condition, '$1' }.
+statement -> expression '->' statement : [ { branch_condition, '$1' }, '$3' ].
+statement -> 'after' expression '->' : { 'after', '$2', [] }.
+statement -> 'after' expression '->' statement : { 'after', '$2', [ '$4' ] }.
 statement -> expression : '$1'.
 
 function_def -> atom '(' ')' '->' : { function_def, value_of('$1'), [], nil }.
-function_def -> atom '(' arg_list ')' '->' : { function_def, value_of('$1'), '$3', nil }.
 function_def -> atom '(' ')' 'when' guard_expression '->' : { function_def, value_of('$1'), [], '$5' }.
+function_def -> atom '(' arg_list ')' '->' : { function_def, value_of('$1'), '$3', nil }.
 function_def -> atom '(' arg_list ')' 'when' guard_expression '->' 
   : { function_def, value_of('$1'), '$3', '$6' }.
 
@@ -90,8 +97,16 @@ sep -> ',' : nil.
 indents -> indent : '$1'.
 indents -> indent indents : '$2'.
 
+%Statements that are actually expressions...
+expression -> expression '!' expression : { 'send', '$1', '$3' }.
+expression -> 'case' expression 'of' : { 'case', '$2' }.
+expression -> 'if' : { 'if' }.
+expression -> 'receive' : { 'receive', [] }.
+expression -> 'receive' statement : { 'receive', [ '$2' ] }.
+
 expression -> atom : { constant, list_value_of('$1') }.
 expression -> list : '$1'.
+expression -> tuple : '$1'.
 expression -> variable : { constant, list_value_of('$1') }.
 expression -> integer : { constant, list_value_of('$1') }.
 expression -> float : { constant, list_value_of('$1') }.
@@ -129,13 +144,16 @@ func_call -> atom '(' arg_list ')' : { funccall, line_of('$1'), list_value_of('$
 list -> '[' ']' : { list, [] }.
 list -> '[' arg_list ']' : { list, '$2' }.
 
+tuple -> '{' '}' : { tuple, [] }.
+tuple -> '{' arg_list '}' : { tuple, '$2' }.
+
 Erlang code.
 value_of(Token) ->
   element(3, Token).
 line_of(Token) ->
   element(2, Token).
 ensure_list(Var) ->
-  if is_list(Var) -> Var
+  if is_list(Var) -> lists:flatten(Var)
   ; true -> [ Var ]
   end
   .

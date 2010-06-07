@@ -1,5 +1,5 @@
 -module(prettyerl).
--export([ test/0, file/1, string/2, convert/1 ]).
+-export([ test/0, file/1, file/2, string/2, string/3, convert/1 ]).
 
 %Walt Woods, 4 June 2010
 %Idea that erlang can be pretty... Python-inspired indented syntax.
@@ -11,6 +11,7 @@
 %TODO: Auto line-carry when next line starts with ',', '+', '-', '++', '--', '*', '/', '|'
 %TODO: Read and respond to blogs
 %TODO: Strip blank lines, unroll statements before convert()
+%TODO: Anonymous functions
 
 %Read file from http://wiki.trapexit.erlang-consulting.com/Read_File_to_List
 readlines(FileName) ->
@@ -24,6 +25,13 @@ get_all_lines(Device, Accum) ->
     ;Line -> get_all_lines(Device, Accum ++ [Line])
   end
   .
+  
+writefile(File, Text) ->
+  {ok, IODevice} = file:open(File, [write])
+  ,file:write(IODevice, Text)
+  ,file:close(IODevice)
+  ,{ok,File}
+  .
 
 file(Atom) when is_atom(Atom) ->
   file(atom_to_list(Atom))
@@ -35,14 +43,28 @@ file(Name) ->
   ,string(Text, Out)
   .
   
+file(Name, debug) ->
+  In = Name ++ ".erlp"
+  ,Out = Name ++ ".erl"
+  ,Text = lists:flatten(readlines(In))
+  ,string(Text, Out, debug)
+  .
+  
 string(String, Outfile) ->
-  L=element(2, prettyerl_lex:string(String))
+  {ok,L,_}=prettyerl_lex:string(String)
   ,{ok,Y}=prettyerl_yec:parse(L)
   ,C=convert(Y)
-  ,{ok, IODevice} = file:open(Outfile, [write])
-  ,file:write(IODevice, C)
-  ,file:close(IODevice)
-  ,{ok,Outfile}
+  ,writefile(Outfile, C)
+  .
+  
+string(String, Outfile, debug) ->
+  {ok,L,_}=prettyerl_lex:string(String)
+  ,io:format("Lexed: ~p~n", [L])
+  ,{ok,Y}=prettyerl_yec:parse(L)
+  ,io:format("Parsed: ~p~n", [Y])
+  ,C=convert(Y)
+  ,io:format("Output:~n~s~n", [C])
+  ,writefile(Outfile, C)
   .
 
 reload(Module) ->
@@ -57,7 +79,7 @@ test() ->
   ,ok = reload(prettyerl_lex)
   ,{ok,_} = yecc:file(prettyerl_yec)
   ,ok=reload(prettyerl_yec)
-  ,B=element(2, prettyerl_lex:string("-module(test)\n-export([hello_world/0,fac/1])\n\nhello_world() -> io:format(\"~p~n\", \"Hello, world!\")\n\nfac(0) -> 1\nfac(N) -> \n  N * fac(N-1)\n\nblah(N) -> is_integer(N), N>0"))
+  ,B=element(2, prettyerl_lex:string("-module(test)\n-export([hello_world/0,fac/1])\n\nhello_world() -> io:format(\"~p~n\", \"Hello, world!\")\n\nfac(0) -> 1\nfac(N) -> \n  N * fac(N-1)\n\nblah(N) when is_atom(N) -> whentop\nblah(N) -> is_integer(N), N>0"))
   ,io:format("Tokenized: ~p~n", [B])
   ,{ok,P}=prettyerl_yec:parse(B)
   ,io:format("Parsed: ~p~n", [P])
@@ -163,11 +185,13 @@ convert(Out, Indents, NewFlags, [{{indent,Line,Indent},Stmts}|T]) ->
   ;
 % HANDLE STATEMENTS
 convert(Out, [{Cur,[first|Rest]}|Indents], NewFlags, Any) ->
-  io:format("First ~p, ~p~n", [ NewFlags, Rest ]),
   convert_stmt(Out, [{Cur,Rest}] ++ Indents, NewFlags, Any)
   ;
+convert(Out, Indents, NewFlags, [{'after',Timeout,Stmts}|T]) ->
+  %ODDITY HANDLING: after clauses don't use level flags..
+  convert_stmt(Out, Indents, NewFlags, [{'after',Timeout,Stmts}] ++ T)
+  ;
 convert(Out, Indents, NewFlags, Any) ->
-  io:format("Level ~p, ~p~n", [ NewFlags, Indents ]),
   convert_stmt(Out ++ convert_level_flags(Indents), Indents, NewFlags, Any)
   .
   
@@ -200,6 +224,42 @@ convert_stmt(Out, Indents, NewFlags, [{function_def,Name,Args,When}|T]) ->
     , T
     )
   ;
+convert_stmt(Out, Indents, NewFlags, [{'case', Expr}|T]) ->
+  convert(Out ++ "case " ++ convert_stmt(Expr) ++ " of "
+    , Indents, {indent,[semicolon,'end']}
+    , T
+    )
+  ;
+convert_stmt(Out, Indents, NewFlags, [{'if'}|T]) ->
+  convert(Out ++ "if "
+    , Indents, {indent,[semicolon,'end']}
+    , T
+    )
+  ;
+convert_stmt(Out, Indents, NewFlags, [{branch_condition,Expr}|T]) ->
+  convert(Out ++ convert_stmt(Expr) ++ " -> "
+    , Indents, { indent,[comma] }
+    , T
+    )
+  ;
+convert_stmt(Out, Indents, NewFlags, [{'send', Proc, Message}|T]) ->
+  convert(Out ++ convert_stmt(Proc) ++ " ! " ++ convert_stmt(Message)
+    , Indents, NewFlags
+    , T
+    )
+  ;
+convert_stmt(Out, Indents, NewFlags, [{'receive', Stmts}|T]) ->
+  convert(Out ++ "receive "
+    , Indents, { indent, [semicolon,'end'] }
+    , Stmts ++ T
+    )
+  ;
+convert_stmt(Out, Indents, NewFlags, [{'after', Timeout, Stmts}|T]) ->
+  convert(Out ++ "after " ++ convert_stmt(Timeout) ++ " -> "
+    , Indents, { indent, [comma] }
+    , Stmts ++ T
+    )
+  ;
 convert_stmt(Out, Indents, NewFlags, [{funccall, _, Name, Args}|T]) ->
   convert(Out ++ io_lib:format("~s(", [ Name ])
     ++ convert_arglist(Args)
@@ -226,6 +286,12 @@ convert_stmt(Out, Indents, NewFlags, [{list, Args}|T]) ->
     , T
     )
   ;
+convert_stmt(Out, Indents, NewFlags, [{tuple, Args}|T]) ->
+  convert(Out ++ "{" ++ convert_arglist(Args) ++ "}"
+    , Indents, NewFlags
+    , T
+    )
+  ;
 convert_stmt(Out, Indents, NewFlags, [{Constant,Text}|T]) ->
   convert(Out ++ Text
     , Indents, NewFlags
@@ -247,6 +313,9 @@ convert_level_flags2(Out, []) ->
 convert_level_flags2(Out, [comma|T]) ->
   convert_level_flags2(Out ++ ",", T)
   ;
+convert_level_flags2(Out, [semicolon|T]) ->
+  convert_level_flags2(Out ++ ";", T)
+  ;
 convert_level_flags2(Out, [H|T]) ->
   %Do nothing for unknown; assume it's a deindent
   convert_level_flags2(Out, T)
@@ -264,6 +333,13 @@ convert_deindent(Out, [func_sep|T]) ->
   ;
 convert_deindent(Out, [func_end|T]) ->
   convert_deindent(Out ++ ".", T)
+  ;
+convert_deindent(Out, ['end'|T]) ->
+  convert_deindent(Out ++ " end", T)
+  ;
+convert_deindent(Out, [semicolon|T]) ->
+  %Level flag - do nothing
+  convert_deindent(Out, T)
   ;
 convert_deindent(Out, [comma|T]) ->
   %Level flag - do nothing

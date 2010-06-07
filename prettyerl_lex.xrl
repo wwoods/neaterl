@@ -12,8 +12,6 @@ Rules.
   ,{token,{indent,TokenLine+1,A}}. %+1 Since the line is counted before the \n
 \s+ :
   skip_token.
-\t+ :
-  skip_token.
 \%[^\n]* :
   skip_token.
 -> :
@@ -28,6 +26,30 @@ Rules.
   {token,{'++',TokenLine,TokenChars}}.
 \-\- :
   {token,{'--',TokenLine,TokenChars}}.
+case :
+  {token,{'case',TokenLine}}.
+of :
+  {token,{'of',TokenLine}}.
+if :
+  {token,{'if',TokenLine}}.
+when :
+  {token,{'when',TokenLine}}.
+orelse :
+  {token,{'orelse',TokenLine}}.
+andalso :
+  {token,{'andalso',TokenLine}}.
+fun :
+  {token,{'fun',TokenLine}}.
+not :
+  {token,{'not',TokenLine}}.
+end :
+  skip_token.
+when :
+  {token,{'when',TokenLine}}.
+receive :
+  {token,{'receive',TokenLine}}.
+after :
+  {token,{'after',TokenLine}}.
 \"[^\\"]*(\\.([^\\"]*))*\" :
   %[_|H] = TokenChars
   %,J = element(1, lists:split(length(H) - 1, H))
@@ -53,25 +75,5 @@ Rules.
   {token,{prep_module,TokenLine}}.
 -export :
   {token,{prep_export,TokenLine}}.
-case :
-  {token,{'case',TokenLine}}.
-if :
-  {token,{'if',TokenLine}}.
-end :
-  {token,{'end',TokenLine}}.
-when :
-  {token,{'when',TokenLine}}.
-orelse :
-  {token,{'orelse',TokenLine}}.
-andalso :
-  {token,{'andalso',TokenLine}}.
-fun :
-  {token,{'fun',TokenLine}}.
-not :
-  {token,{'not',TokenLine}}.
-end :
-  skip_token.
-when :
-  {token,{'when',TokenLine}}.
   
 Erlang code.

@@ -18,7 +18,7 @@ test(0) ->
 test(N) ->
   if
     N == 1 -> true
-	  true -> false
+    true -> false
   end
 
 comm() ->
