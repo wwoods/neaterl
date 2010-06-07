@@ -13,6 +13,7 @@ statement_list statement
 seps sep indents
 function_def 
 arg_list arg_list2
+guard_expression
 expression uminus
 list
 func_call
@@ -20,17 +21,22 @@ func_call
 
 Terminals 
 '(' ')' '@' '[' ']' '{' '}' '+' '-' '/' '*' '.' '>' '<'
-'->' '++' '--' '!' ':'
+'->' '++' '--' '!' ':' ';' '=' '==' '>=' '<='
 indent ','
 atom float integer variable string
 prep_module prep_export 
 'case' 'if' 'end' 'when'
-'andalso' 'orelse' 'fun' 'not' 'when'
+'andalso' 'orelse' 'fun' 'not'
 .
 
 Rootsymbol module.
 
+Left 5 ';'.
 Left 10 ','.
+Left 20 '='.
+Left 20 '=='.
+Left 20 '>'.
+Left 20 '<'.
 Left 50 '++'.
 Left 50 '--'.
 Left 100 '+'.
@@ -55,18 +61,24 @@ export_list2 -> export_func seps export_list2
 statement_list -> indents statement : [ { '$1', stmts_to_list('$2') } ].
 statement_list -> indents statement statement_list : [ { '$1', stmts_to_list('$2') } ] ++ '$3'.
 
-statement -> statement ',' statement : ['$1', '$2'].
-statement -> expression : '$1'.
+statement -> statement ',' statement : ['$1', '$3'].
 statement -> function_def : '$1'.
 statement -> function_def statement : ['$1', '$2'].
+statement -> expression : '$1'.
 
-function_def -> atom '(' ')' '->' : { function_def, value_of('$1'), [] }.
-function_def -> atom '(' arg_list ')' '->' : { function_def, value_of('$1'), '$3' }.
+function_def -> atom '(' ')' '->' : { function_def, value_of('$1'), [], nil }.
+function_def -> atom '(' arg_list ')' '->' : { function_def, value_of('$1'), '$3', nil }.
+function_def -> atom '(' ')' 'when' guard_expression '->' : { function_def, value_of('$1'), [], '$5' }.
+function_def -> atom '(' arg_list ')' 'when' guard_expression '->' 
+  : { function_def, value_of('$1'), '$3', '$6' }.
 
 arg_list -> arg_list2 : '$1'.
 arg_list -> seps arg_list2 : '$2'.
 arg_list2 -> expression : [ '$1' ].
 arg_list2 -> expression seps arg_list2 : [ '$1' ] ++ '$3'.
+
+guard_expression -> expression : '$1'.
+guard_expression -> guard_expression ',' guard_expression : { binary_op, ",", '$1', '$3' }.
 
 %seps is any separator (indent or ',')
 seps -> sep : nil.
@@ -85,6 +97,12 @@ expression -> integer : { constant, list_value_of('$1') }.
 expression -> float : { constant, list_value_of('$1') }.
 expression -> string : { constant, list_value_of('$1') }.
 expression -> func_call : '$1'.
+expression -> expression '>' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.
+expression -> expression '<' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.
+expression -> expression '>=' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.
+expression -> expression '<=' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.
+expression -> expression '==' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.
+expression -> expression '=' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.
 expression -> expression '+' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.
 expression -> expression '-' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.
 expression -> expression '*' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.

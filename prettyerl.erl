@@ -10,15 +10,39 @@
 %TODO: Pipe char '|' - Pipes output of A to B
 %TODO: Auto line-carry when next line starts with ',', '+', '-', '++', '--', '*', '/', '|'
 %TODO: Read and respond to blogs
+%TODO: Strip blank lines, unroll statements before convert()
 
+%Read file from http://wiki.trapexit.erlang-consulting.com/Read_File_to_List
+readlines(FileName) ->
+  {ok, Device} = file:open(FileName, [read])
+  ,get_all_lines(Device, "")
+  .
+  
+get_all_lines(Device, Accum) ->
+  case io:get_line(Device, "") of
+    eof -> file:close(Device), Accum
+    ;Line -> get_all_lines(Device, Accum ++ [Line])
+  end
+  .
+
+file(Atom) when is_atom(Atom) ->
+  file(atom_to_list(Atom))
+  ;
 file(Name) ->
-  notimplemented
+  In = Name ++ ".erlp"
+  ,Out = Name ++ ".erl"
+  ,Text = lists:flatten(readlines(In))
+  ,string(Text, Out)
   .
   
 string(String, Outfile) ->
   L=element(2, prettyerl_lex:string(String))
   ,{ok,Y}=prettyerl_yec:parse(L)
   ,C=convert(Y)
+  ,{ok, IODevice} = file:open(Outfile, [write])
+  ,file:write(IODevice, C)
+  ,file:close(IODevice)
+  ,{ok,Outfile}
   .
 
 reload(Module) ->
@@ -33,7 +57,7 @@ test() ->
   ,ok = reload(prettyerl_lex)
   ,{ok,_} = yecc:file(prettyerl_yec)
   ,ok=reload(prettyerl_yec)
-  ,B=element(2, prettyerl_lex:string("-module(test)\n-export([hello_world/0,fac/1])\n\nhello_world() -> io:format(\"~p~n\", \"Hello, world!\")\n\nfac(0) -> 1\nfac(N) -> \n  N * fac(N-1)"))
+  ,B=element(2, prettyerl_lex:string("-module(test)\n-export([hello_world/0,fac/1])\n\nhello_world() -> io:format(\"~p~n\", \"Hello, world!\")\n\nfac(0) -> 1\nfac(N) -> \n  N * fac(N-1)\n\nblah(N) -> is_integer(N), N>0"))
   ,io:format("Tokenized: ~p~n", [B])
   ,{ok,P}=prettyerl_yec:parse(B)
   ,io:format("Parsed: ~p~n", [P])
@@ -103,6 +127,11 @@ convert(Out, Indents, NewFlags, [{verbatim, Output}|T]) ->
   convert(Out ++ Output, Indents, NewFlags, T)
   ;
 % HANDLE INDENTATION CHANGES
+convert(Out, [{nonindent,IFlags}|Indents], NewFlags, [{{indent,Line,New},Stmts}|T]) ->
+  %Handles when an indent was a single line
+  convert(Out ++ convert_deindent(IFlags)
+    , Indents, NewFlags, [{{indent,Line,New},Stmts}] ++ T)
+  ;
 convert(Out, [{Cur,F}|Indents], nil, [{{indent,Line,New},Stmts}|T]) when not (Cur == New) ->
   case lists:prefix(New, Cur) of
     false -> io_lib:format("Unexpected indent, line ~p", [ Line ])
@@ -127,26 +156,47 @@ convert(Out, [{Cur,F}|Indents], {indent,IFlags}, [{{indent,Line,New},Stmts}|T]) 
   ;
 convert(Out, Indents, {indent,IFlags}, [Stmt|T]) ->
   %Stmt is NOT {{indent,_,_},_}, so is a one-line indented clause.
-  convert(Out, Indents, nil, [Stmt] ++ [{verbatim, convert_deindent("", IFlags)}] ++ T)
+  convert(Out, [{nonindent, IFlags}] ++ Indents, nil, [Stmt] ++ T)
   ;
 convert(Out, Indents, NewFlags, [{{indent,Line,Indent},Stmts}|T]) ->
   convert(Out ++ [ { goto_line, Line, Indent } ], Indents, NewFlags, Stmts ++ T)
   ;
 % HANDLE STATEMENTS
 convert(Out, [{Cur,[first|Rest]}|Indents], NewFlags, Any) ->
+  io:format("First ~p, ~p~n", [ NewFlags, Rest ]),
   convert_stmt(Out, [{Cur,Rest}] ++ Indents, NewFlags, Any)
   ;
 convert(Out, Indents, NewFlags, Any) ->
+  io:format("Level ~p, ~p~n", [ NewFlags, Indents ]),
   convert_stmt(Out ++ convert_level_flags(Indents), Indents, NewFlags, Any)
   .
   
 convert_stmt(Single) when not is_list(Single) ->
   convert_stmt("", [], [], [ Single ])
   .
+
+%Looks for a new function definition; unwraps indent loops
+next_func_def([]) -> nil
+;next_func_def([{{indent,_,_},Stmts}|T]) -> next_func_def(Stmts ++ T)
+;next_func_def([{function_def,Name,Args,When}|T]) -> {function_def,Name,Args,When}
+;next_func_def([H|T]) -> next_func_def(T)
+.
   
-convert_stmt(Out, Indents, NewFlags, [{function_def,Name,Args}|T]) ->
-  convert(Out ++ io_lib:format("~p(~s) -> ", [ Name, convert_arglist(Args) ])
-    , Indents, {indent,[comma,{func, Name, length(Args)}]}
+convert_stmt(Out, Indents, NewFlags, [{function_def,Name,Args,When}|T]) ->
+  EndType = case next_func_def(T) of
+      {function_def,Name,Args2,_} when length(Args) == length(Args2) ->
+        func_sep
+      ;_ -> func_end
+    end
+  ,
+  WhenPart = case When of
+      nil -> ""
+      ;_ -> " when " ++ convert_stmt(When)
+    end
+  ,
+  convert(Out ++ io_lib:format("~p(", [ Name ]) 
+    ++ convert_arglist(Args) ++ ")" ++ WhenPart ++ " -> "
+    , Indents, {indent,[comma,EndType]}
     , T
     )
   ;
@@ -159,13 +209,13 @@ convert_stmt(Out, Indents, NewFlags, [{funccall, _, Name, Args}|T]) ->
     )
   ;
 convert_stmt(Out, Indents, NewFlags, [{binary_op,Op,Left,Right}|T]) ->
-  convert(Out ++ convert_stmt(Left) ++ Op ++ convert_stmt(Right)
+  convert(Out ++ "(" ++ convert_stmt(Left) ++ ")" ++ Op ++ "(" ++ convert_stmt(Right) ++ ")"
     , Indents, NewFlags
     , T
     )
   ;
 convert_stmt(Out, Indents, NewFlags, [{unary_op,Op,Left}|T]) ->
-  convert(Out ++ Op ++ convert_stmt(Left)
+  convert(Out ++ Op ++ "(" ++ convert_stmt(Left) ++ ")"
     , Indents, NewFlags
     , T
     )
@@ -209,8 +259,11 @@ convert_deindent(List) when is_list(List) ->
 convert_deindent(Out, []) ->
   Out
   ;
-convert_deindent(Out, [{func, Name, ArgCount}|T]) ->
-  convert_deindent(Out ++ io_lib:format("<End of ~s>", [ Name ]), T)
+convert_deindent(Out, [func_sep|T]) ->
+  convert_deindent(Out ++ ";", T)
+  ;
+convert_deindent(Out, [func_end|T]) ->
+  convert_deindent(Out ++ ".", T)
   ;
 convert_deindent(Out, [comma|T]) ->
   %Level flag - do nothing
