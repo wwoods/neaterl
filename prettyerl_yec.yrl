@@ -14,17 +14,17 @@ seps sep indents
 function_def 
 arg_list arg_list2
 guard_expression
-expression uminus
+expression expression_atom uminus
 list tuple
-func_call
+func_call func_call_name
 .
 
 Terminals 
 '(' ')' '@' '[' ']' '{' '}' '+' '-' '/' '*' '.' '>' '<'
 '->' '++' '--' '!' ':' ';' '=' '==' '>=' '<='
 indent ','
-atom float integer variable string
-prep_module prep_export 
+atom float integer variable string macro
+prep_module prep_export preproc
 'case' 'of' 'if' 'end' 'when'
 'andalso' 'orelse' 'fun' 'not'
 'receive' 'after'
@@ -47,12 +47,12 @@ Left 200 '*'.
 Left 200 '/'.
 Unary 300 uminus.
 
-module -> prep_module '(' atom ')' seps export statement_list
-  : { module, value_of('$3'), '$6', '$7' }.
-export -> prep_export '(' '[' ']' ')'
+module -> prep_module atom ')' seps export statement_list
+  : { module, value_of('$2'), '$5', '$6' }.
+export -> prep_export '[' ']' ')'
   : [].
-export -> prep_export '(' '[' export_list ']' ')'
-  : '$4'.
+export -> prep_export '[' export_list ']' ')'
+  : '$3'.
 export_func -> atom '/' integer : { export, value_of('$1'), value_of('$3') }.
 export_list -> seps export_list2 : '$2'.
 export_list -> export_list2 : '$1'.
@@ -72,6 +72,7 @@ statement -> expression '->' statement : [ { branch_condition, '$1' }, '$3' ].
 statement -> 'after' expression '->' : { 'after', '$2', [] }.
 statement -> 'after' expression '->' statement : { 'after', '$2', [ '$4' ] }.
 statement -> expression : '$1'.
+statement -> preproc : { constant, list_value_of('$1') ++ "." }.
 
 function_def -> atom '(' ')' '->' : { function_def, value_of('$1'), [], nil }.
 function_def -> atom '(' ')' 'when' guard_expression '->' : { function_def, value_of('$1'), [], '$5' }.
@@ -104,14 +105,19 @@ expression -> 'if' : { 'if' }.
 expression -> 'receive' : { 'receive', [] }.
 expression -> 'receive' statement : { 'receive', [ '$2' ] }.
 
-expression -> atom : { constant, list_value_of('$1') }.
+expression_atom -> atom : { constant, list_value_of('$1') }.
+expression_atom -> macro : { macro, list_value_of('$1'), nil }.
+expression_atom -> macro '(' ')' : { macro, list_value_of('$1'), [] }.
+expression_atom -> macro '(' arg_list ')' : { constant, list_value_of('$1'), '$3' }.
+expression_atom -> variable : { constant, list_value_of('$1') }.
+expression_atom -> integer : { constant, list_value_of('$1') }.
+expression_atom -> float : { constant, list_value_of('$1') }.
+expression_atom -> string : { constant, list_value_of('$1') }.
+
+expression -> expression_atom : '$1'.
+expression -> func_call : '$1'.
 expression -> list : '$1'.
 expression -> tuple : '$1'.
-expression -> variable : { constant, list_value_of('$1') }.
-expression -> integer : { constant, list_value_of('$1') }.
-expression -> float : { constant, list_value_of('$1') }.
-expression -> string : { constant, list_value_of('$1') }.
-expression -> func_call : '$1'.
 expression -> expression '>' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.
 expression -> expression '<' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.
 expression -> expression '>=' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.
@@ -128,18 +134,21 @@ expression -> uminus : '$1'.
 expression -> '(' expression ')' : '$2'.
 uminus -> '-' expression : { unary_op, "-", '$2' }.
 
-func_call -> atom ':' atom '(' ')' : { funccall
-  , line_of('$1')
-  , list_value_of('$1') ++ ":" ++ list_value_of('$3')
-  , [] 
-  }.
-func_call -> atom ':' atom '(' arg_list ')' : { funccall
-  , line_of('$1')
-  , list_value_of('$1') ++ ":" ++ list_value_of('$3')
-  , '$5' 
-  }.
-func_call -> atom '(' ')' : { funccall, line_of('$1'), list_value_of('$1'), [] }.
-func_call -> atom '(' arg_list ')' : { funccall, line_of('$1'), list_value_of('$1'), '$3' }.
+%Weird bug here, can't replace atom with expression_atom, which sucks.
+func_call -> atom '(' ')' : { funccall, [ { constant, list_value_of('$1') } ], [] }.
+func_call -> atom '(' arg_list ')' : { funccall, [ { constant, list_value_of('$1') } ], '$3' }.
+func_call -> variable '(' ')' : { funccall, [ { constant, list_value_of('$1') } ], [] }.
+func_call -> variable '(' arg_list ')' : { funccall, [ { constant, list_value_of('$1') } ], '$3' }.
+func_call -> '(' expression ')' '(' ')' : { funccall, ['$2'], [] }.
+func_call -> '(' expression ')' '(' arg_list ')' : { funccall, ['$2'], '$5' }.
+func_call -> expression_atom ':' func_call 
+  : { funccall, Names, Args } = '$3'
+  , { funccall, ['$1'] ++ Names, Args }
+  .
+func_call -> '(' expression ')' ':' func_call 
+  : { funccall, Names, Args } = '$5'
+  , { funccall, ['$2'] ++ Names, Args }
+  .
 
 list -> '[' ']' : { list, [] }.
 list -> '[' arg_list ']' : { list, '$2' }.

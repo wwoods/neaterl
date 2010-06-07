@@ -4,9 +4,9 @@
 %Walt Woods, 4 June 2010
 %Idea that erlang can be pretty... Python-inspired indented syntax.
 %No more '.' for function ends
-%No more ',' for "Then do this"
+%No more 'end' keyword at all (though it can be used, it isn't parsed)
+%No more ',' for "Then do this" (Unless two statements are on the same line)
 %No more ';' for "else"
-%end keyword is optional
 %TODO: Pipe char '|' - Pipes output of A to B
 %TODO: Auto line-carry when next line starts with ',', '+', '-', '++', '--', '*', '/', '|'
 %TODO: Read and respond to blogs
@@ -38,10 +38,13 @@ compile(File) when is_atom(File) ->
   ;
 compile(File) ->
   {ok,Module} = file(File)
-  ,{ok,ModName} = compile:file(Module)
-  ,code:purge(ModName)
-  ,code:load_file(ModName)
-  ,{ok,ModName}
+  ,case compile:file(Module) of
+    {ok,ModName} ->
+      code:purge(ModName)
+      ,code:load_file(ModName)
+      ,{ok,ModName}
+    ;error -> error
+  end
   .
 
 file(Atom) when is_atom(Atom) ->
@@ -208,6 +211,9 @@ convert(Out, Indents, NewFlags, Any) ->
   
 convert_stmt(Single) when not is_list(Single) ->
   convert_stmt("", [], [], [ Single ])
+  ;
+convert_stmt(Single) ->
+  convert_stmt("", [{"",[]}], [], Single )
   .
 
 %Looks for a new function definition; unwraps indent loops
@@ -271,8 +277,8 @@ convert_stmt(Out, Indents, NewFlags, [{'after', Timeout, Stmts}|T]) ->
     , Stmts ++ T
     )
   ;
-convert_stmt(Out, Indents, NewFlags, [{funccall, _, Name, Args}|T]) ->
-  convert(Out ++ io_lib:format("~s(", [ Name ])
+convert_stmt(Out, Indents, NewFlags, [{funccall, Name, Args}|T]) ->
+  convert(Out ++ convert_stmt(list_insert({ constant, ":" }, Name)) ++ "(" 
     ++ convert_arglist(Args)
     ++ ")"
     , Indents, NewFlags
@@ -303,7 +309,19 @@ convert_stmt(Out, Indents, NewFlags, [{tuple, Args}|T]) ->
     , T
     )
   ;
-convert_stmt(Out, Indents, NewFlags, [{Constant,Text}|T]) ->
+convert_stmt(Out, Indents, NewFlags, [{macro, Symbol, nil}|T]) ->
+  convert(Out ++ Symbol
+    , Indents, NewFlags
+    , T
+    )
+  ;
+convert_stmt(Out, Indents, NewFlags, [{macro, Symbol, Args}|T]) ->
+  convert(Out ++ Symbol ++ "(" ++ convert_arglist(Args) ++ ")"
+    , Indents, NewFlags
+    , T
+    )
+  ;
+convert_stmt(Out, Indents, NewFlags, [{constant,Text}|T]) ->
   convert(Out ++ Text
     , Indents, NewFlags
     , T
@@ -355,6 +373,18 @@ convert_deindent(Out, [semicolon|T]) ->
 convert_deindent(Out, [comma|T]) ->
   %Level flag - do nothing
   convert_deindent(Out, T)
+  .
+  
+list_insert(Symbol, List) ->
+  [_|Result] = list_insert([], Symbol, List)
+  ,Result
+  .
+  
+list_insert(Out, Symbol, []) ->
+  Out
+  ;
+list_insert(Out, Symbol, [H|T]) ->
+  list_insert(Out ++ [ Symbol ] ++ [H], Symbol, T)
   .
 
 comma_delimit([]) ->

@@ -7,12 +7,23 @@ Rules.
 
 \\\n :
   skip_token.
+\%[^\n]* :
+  skip_token.
+\n\- :
+  %Beginning of preprocessor, make an indent record and
+  %push back the dash
+  {token,{indent,TokenLine+1,""},"-----"}.
+-module[\(] :
+  {token,{prep_module,TokenLine}}.
+-----export[\(] :
+  {token,{prep_export,TokenLine}}.
+-----([^e]|e[^x]|ex[^p])[^\n]* :
+  [_,_,_,_|A] = TokenChars
+  ,{token,{preproc,TokenLine+1,A}}. %+1 Since line counted before \n
 \n\s* :
   [_|A] = TokenChars
   ,{token,{indent,TokenLine+1,A}}. %+1 Since the line is counted before the \n
 \s+ :
-  skip_token.
-\%[^\n]* :
   skip_token.
 -> :
   {token,{'->',TokenLine,TokenChars}}.
@@ -61,6 +72,8 @@ after :
   {token,{float,TokenLine,list_to_float(TokenChars)}}.
 [a-z][0-9a-zA-Z_]* :
   {token,{atom,TokenLine,list_to_atom(TokenChars)}}.
+\?[A-Z][0-9a-zA-Z_]* :
+  {token,{macro,TokenLine,TokenChars}}.
 \'[^\\']*(\\.([^\\']*))*\' :
   %[_|H] = TokenChars
   %,J = element(1, lists:split(length(H) - 1, H))
@@ -71,9 +84,5 @@ after :
 [\[\]\{\}\\+\-\*\/%\:\;\|\(\)!><=\.\,=] :
   [H|_]=TokenChars
   ,{token,{list_to_atom([H]),TokenLine,TokenChars}}.
--module :
-  {token,{prep_module,TokenLine}}.
--export :
-  {token,{prep_export,TokenLine}}.
   
 Erlang code.

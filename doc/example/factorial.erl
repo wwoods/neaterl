@@ -8,6 +8,8 @@ fac(0) -> 1;
 fac(N) when (is_integer(N)),((N)>(0)) -> 
   (N)*(fac((N)-(1))).
 
+-define(MOD(), 36).
+
 test(0) -> 
   put(myatom,"hello world")
   ,erlang:display(get(myatom))
@@ -18,7 +20,7 @@ test(0) ->
 test(N) -> 
   if 
     (N)==(1) -> true
-    ;true -> false end.
+    ;true -> (?MODULE:test((N)-(1)))*(?MOD()) end.
 
 comm() -> 
   io:format('I am ~p~n',[self()])
