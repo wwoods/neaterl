@@ -156,7 +156,7 @@ convert(Out, [{Cur,F}|Indents], {indent,IFlags}, [{{indent,Line,New},Stmts}|T]) 
   ;
 convert(Out, Indents, {indent,IFlags}, [Stmt|T]) ->
   %Stmt is NOT {{indent,_,_},_}, so is a one-line indented clause.
-  convert(Out, [{nonindent, IFlags}] ++ Indents, nil, [Stmt] ++ T)
+  convert(Out, [{nonindent, [first] ++ IFlags}] ++ Indents, nil, [Stmt] ++ T)
   ;
 convert(Out, Indents, NewFlags, [{{indent,Line,Indent},Stmts}|T]) ->
   convert(Out ++ [ { goto_line, Line, Indent } ], Indents, NewFlags, Stmts ++ T)
