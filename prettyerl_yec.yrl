@@ -9,22 +9,37 @@
 
 Nonterminals 
 module export export_list export_list2 export_func
-module_statement_list module_statement
-seps sep
-statlist element elements
+statement_list statement
+seps sep indents
+function_def 
+arg_list arg_list2
+expression uminus
+list
+func_call
 .
 
 Terminals 
-'(' ')' '@' '[' ']' '{' '}' '+' '-' '/' '*' '.'
-separator
-atom float integer variable 
+'(' ')' '@' '[' ']' '{' '}' '+' '-' '/' '*' '.' '>' '<'
+'->' '++' '--' '!' ':'
+indent ','
+atom float integer variable string
 prep_module prep_export 
-'case' 'if' 'end'
+'case' 'if' 'end' 'when'
+'andalso' 'orelse' 'fun' 'not' 'when'
 .
 
 Rootsymbol module.
 
-module -> prep_module '(' atom ')' seps export module_statement_list
+Left 10 ','.
+Left 50 '++'.
+Left 50 '--'.
+Left 100 '+'.
+Left 100 '-'.
+Left 200 '*'.
+Left 200 '/'.
+Unary 300 uminus.
+
+module -> prep_module '(' atom ')' seps export statement_list
   : { module, value_of('$3'), '$6', '$7' }.
 export -> prep_export '(' '[' ']' ')'
   : [].
@@ -34,25 +49,89 @@ export_func -> atom '/' integer : { export, value_of('$1'), value_of('$3') }.
 export_list -> seps export_list2 : '$2'.
 export_list -> export_list2 : '$1'.
 export_list2 -> export_func : [ '$1' ].
-export_list2 -> export_func seps export_list2 : { lists, [ '$1' ], '$3' }.
+export_list2 -> export_func seps export_list2 
+  : [ '$1' ] ++ '$3' .
 
-module_statement_list -> seps module_statement : '$2'.
-module_statement_list -> seps module_statement module_statement_list : { stmt_list, '$2', '$3' }.
+statement_list -> indents statement : [ { '$1', stmts_to_list('$2') } ].
+statement_list -> indents statement statement_list : [ { '$1', stmts_to_list('$2') } ] ++ '$3'.
 
-module_statement -> atom : '$1'.
+statement -> statement ',' statement : ['$1', '$2'].
+statement -> expression : '$1'.
+statement -> function_def : '$1'.
+statement -> function_def statement : ['$1', '$2'].
 
+function_def -> atom '(' ')' '->' : { function_def, value_of('$1'), [] }.
+function_def -> atom '(' arg_list ')' '->' : { function_def, value_of('$1'), '$3' }.
+
+arg_list -> arg_list2 : '$1'.
+arg_list -> seps arg_list2 : '$2'.
+arg_list2 -> expression : [ '$1' ].
+arg_list2 -> expression seps arg_list2 : [ '$1' ] ++ '$3'.
+
+%seps is any separator (indent or ',')
 seps -> sep : nil.
 seps -> sep seps : nil.
-sep -> separator : nil.
+sep -> indent : nil.
+sep -> ',' : nil.
 
-%list -> '[' ']' : {list,[],[]}.
-%list -> '[' elements ']' : '$2'.
+%line is any number of indents
+indents -> indent : '$1'.
+indents -> indent indents : '$2'.
 
-%elements -> element : {cons, '$1', nil}.
-%elements -> element '[' elements : { cons, '$1', '$3'}.
-%element -> atom : '$1'.
-%element -> list : '$1'.
+expression -> atom : { constant, list_value_of('$1') }.
+expression -> list : '$1'.
+expression -> variable : { constant, list_value_of('$1') }.
+expression -> integer : { constant, list_value_of('$1') }.
+expression -> float : { constant, list_value_of('$1') }.
+expression -> string : { constant, list_value_of('$1') }.
+expression -> func_call : '$1'.
+expression -> expression '+' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.
+expression -> expression '-' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.
+expression -> expression '*' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.
+expression -> expression '/' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.
+expression -> expression '++' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.
+expression -> expression '--' expression : { binary_op, list_value_of('$2'), '$1', '$3' }.
+expression -> uminus : '$1'.
+expression -> '(' expression ')' : '$2'.
+uminus -> '-' expression : { unary_op, "-", '$2' }.
+
+func_call -> atom ':' atom '(' ')' : { funccall
+  , line_of('$1')
+  , list_value_of('$1') ++ ":" ++ list_value_of('$3')
+  , [] 
+  }.
+func_call -> atom ':' atom '(' arg_list ')' : { funccall
+  , line_of('$1')
+  , list_value_of('$1') ++ ":" ++ list_value_of('$3')
+  , '$5' 
+  }.
+func_call -> atom '(' ')' : { funccall, line_of('$1'), list_value_of('$1'), [] }.
+func_call -> atom '(' arg_list ')' : { funccall, line_of('$1'), list_value_of('$1'), '$3' }.
+
+list -> '[' ']' : { list, [] }.
+list -> '[' arg_list ']' : { list, '$2' }.
 
 Erlang code.
 value_of(Token) ->
   element(3, Token).
+line_of(Token) ->
+  element(2, Token).
+ensure_list(Var) ->
+  if is_list(Var) -> Var
+  ; true -> [ Var ]
+  end
+  .
+stmts_to_list([]) -> []
+;stmts_to_list([H|T]) ->
+  ensure_list(H) ++ stmts_to_list(T)
+;stmts_to_list(Other) ->
+  [Other]
+  .
+
+list_value_of(N) -> list_value_of2(element(3, N)).
+
+list_value_of2(N) when is_atom(N) -> atom_to_list(N)
+;list_value_of2(N) when is_integer(N) -> integer_to_list(N)
+;list_value_of2(N) when is_float(N) -> float_to_list(N)
+;list_value_of2(N) when is_list(N) -> N
+.

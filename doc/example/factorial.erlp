@@ -1,7 +1,7 @@
 -module(prettyfac)
 -export([fac/1,test/1,comm/0,comm/1,yecc/0])
 
-%Treat ',' and '\n' as same lexical symbol.
+%Treat ',' and '\n' as same concept (a separator).
 %Allow [,\n] at front of list terms
 
 fac(0) -> 1
@@ -32,7 +32,7 @@ comm() ->
     { 'DOWN', Ref, process, Pid2, Reason } ->
       io:format('~p Exit Detected: ~s~n', [ self(), Reason ] )
   end
-  
+
 comm(true) ->
   receive
     { kill, N } -> 
