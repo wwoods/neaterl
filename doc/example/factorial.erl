@@ -20,7 +20,6 @@ test(N) ->
     (N)==(1) -> true
     ;true -> false end.
 
-
 comm() -> 
   io:format('I am ~p~n',[self()])
   ,(PId)=(spawn(fac,comm,[true]))
@@ -31,7 +30,6 @@ comm() ->
   ,receive 
     {'DOWN',Ref,process,Pid2,Reason} -> 
       io:format('~p Exit Detected: ~s~n',[self(),Reason]) end.
-
 
 comm(true) -> 
   receive 
@@ -45,8 +43,6 @@ comm(true) ->
         after (N)*(1000) -> 
           io:format('~p ~s~n',[self(),'Kill executed'])
           ,erlang:exit(normal) end end.
-
-
 
 reload(Module) -> 
   compile:file(Module)

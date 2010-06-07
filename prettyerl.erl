@@ -1,5 +1,5 @@
 -module(prettyerl).
--export([ test/0, file/1, file/2, string/2, string/3, convert/1 ]).
+-export([ test/0, compile/1, file/1, file/2, string/2, string/3, convert/1 ]).
 
 %Walt Woods, 4 June 2010
 %Idea that erlang can be pretty... Python-inspired indented syntax.
@@ -31,6 +31,17 @@ writefile(File, Text) ->
   ,file:write(IODevice, Text)
   ,file:close(IODevice)
   ,{ok,File}
+  .
+  
+compile(File) when is_atom(File) ->
+  compile(atom_to_list(File))
+  ;
+compile(File) ->
+  {ok,Module} = file(File)
+  ,{ok,ModName} = compile:file(Module)
+  ,code:purge(ModName)
+  ,code:load_file(ModName)
+  ,{ok,ModName}
   .
 
 file(Atom) when is_atom(Atom) ->

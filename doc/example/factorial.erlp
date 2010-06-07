@@ -14,12 +14,11 @@ test(0) ->
   case true of
     false -> never
     true -> always
-  end
+
 test(N) ->
   if
     N == 1 -> true
     true -> false
-  end
 
 comm() ->
   io:format('I am ~p~n', [ self() ])
@@ -31,7 +30,6 @@ comm() ->
   receive
     { 'DOWN', Ref, process, Pid2, Reason } ->
       io:format('~p Exit Detected: ~s~n', [ self(), Reason ] )
-  end
 
 comm(true) ->
   receive
@@ -45,8 +43,6 @@ comm(true) ->
         after N*1000 ->
           io:format('~p ~s~n', [ self(), 'Kill executed' ])
           erlang:exit(normal)
-      end
-  end
   
 reload(Module) ->
   compile:file(Module)
