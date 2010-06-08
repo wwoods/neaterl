@@ -30,7 +30,7 @@ Terminals
 line 'begin' 'end' ','
 atom float integer variable string macro
 prep_module prep_export preproc
-'case' 'of' 'if' 'end' 'when'
+'case' 'of' 'if' 'when'
 'andalso' 'orelse' 'fun' 'not'
 'receive' 'after'
 .
@@ -68,6 +68,7 @@ export_func -> atom '/' integer : { export, line_of('$1'), value_of('$1'), value
   
 module_statement_list -> module_statement : stmts_to_list('$1').
 module_statement_list -> module_statement line module_statement_list : stmts_to_list('$1') ++ '$3'.
+module_statement_list -> line : [].
 
 module_statement -> atom func_def_body : { function_def, line_of('$1'), value_of('$1'), '$2' }.
 module_statement -> preproc : { constant, line_of('$1'), list_value_of('$1') ++ "." }.
@@ -83,21 +84,9 @@ statement_line -> statement ',' statement_line : stmts_to_list('$1') ++ '$3'.
 
 statement -> expression : '$1'.
 
-arg_list -> '(' ')' : [].
-arg_list -> '(' arg_parts ')' : '$2'.
-arg_parts -> expression : [ '$1' ].
-arg_parts -> expression sep arg_parts : [ '$1' ] ++ '$3'.
-
-func_def_body -> arg_list '->' statement_block : { function_body, nil, '$1', nil, '$3' }.
-func_def_body -> arg_list 'when' guard_expression '->' statement_block : { function_body, nil, '$1', '$3', '$5' }.
-
 guard_expression -> expression : '$1'.
 guard_expression -> guard_expression ',' guard_expression : { binary_op, line_of('$1'), ",", '$1', '$3' }.
 guard_expression -> guard_expression ';' guard_expression : { binary_op, line_of('$1'), ";", '$1', '$3' }.
-
-%seps is any statement separator (line breaks or ',')
-sep -> line : nil.
-sep -> ',' : nil.
 
 %Remember, some statements are actually expressions...
 expression -> 'case' expression 'of' branch_block : { 'case', line_of('$1'), '$2', '$4' }.
@@ -143,7 +132,7 @@ branch_list -> branch line branch_list : [ '$1' ] ++ '$3'.
 branch_line -> branch : [ '$1' ].
 branch_line -> branch ',' branch_line : [ '$1' ] ++ '$3'.
 
-branch -> expression '->' statement_block : { branch, line_of('$1'), '$1', '$3' }.
+branch -> guard_expression '->' statement_block : { branch, line_of('$1'), '$1', '$3' }.
 branch -> 'after' expression '->' statement_block : { 'after', line_of('$1'), '$2', '$4' }.
 
 anon_fun -> 'fun' anon_fun_clause_block : { 'fun', line_of('$1'), '$2' }.
@@ -162,6 +151,18 @@ anon_fun_clause -> func_def_body : '$1'.
 func_call -> expression_atom arg_list : { funccall, line_of('$1'), [ '$1' ], '$2' }.
 func_call -> expression_atom ':' func_call : { funccall, line_of('$1'), [ '$1' ] ++ element(3, '$3'), element(4, '$3') }.
 
+arg_list -> '(' ')' : [].
+arg_list -> '(' arg_parts ')' : '$2'.
+arg_parts -> expression : [ '$1' ].
+arg_parts -> expression sep arg_parts : [ '$1' ] ++ '$3'.
+
+func_def_body -> arg_list '->' statement_block : { function_body, nil, '$1', nil, '$3' }.
+func_def_body -> arg_list 'when' guard_expression '->' statement_block : { function_body, nil, '$1', '$3', '$5' }.
+
+%seps is any statement separator (line breaks or ',')
+sep -> line : nil.
+sep -> ',' : nil.
+
 list -> '[' ']' : { list, [] }.
 list -> '[' arg_list ']' : { list, line_of('$1'), '$2' }.
 
@@ -174,7 +175,6 @@ constant_from({_,Line,Value}) ->
 value_of(Token) ->
   element(3, Token).
 line_of(Token) ->
-  erlang:display(Token),
   element(2, Token).
 ensure_list(Var) ->
   if is_list(Var) -> lists:flatten(Var)

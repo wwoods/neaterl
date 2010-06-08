@@ -79,14 +79,16 @@ file(Name, debug) ->
   .
   
 string(String, Outfile) ->
-  {ok,L,_}=prettyerl_lex:string(String)
+  {ok,B,_}=prettyerl_lex:string(String)
+  ,{ok,L}=convert_indents(B)
   ,{ok,Y}=prettyerl_yec:parse(L)
   ,C=convert(Y)
   ,writefile(Outfile, C)
   .
   
 string(String, Outfile, debug) ->
-  {ok,L,_}=prettyerl_lex:string(String)
+  {ok,B,_}=prettyerl_lex:string(String)
+  ,{ok,L}=convert_indents(B)
   ,io:format("Lexed: ~p~n", [L])
   ,{ok,Y}=prettyerl_yec:parse(L)
   ,io:format("Parsed: ~p~n", [Y])
@@ -133,6 +135,7 @@ convert_indents(Out, Indents, [{indent,Line,New},{indent,NextLine,NextText}|T]) 
 convert_indents(Out, [Cur|Indents], [{indent,Line,New}|T]) ->
   if
     length(New) > length(Cur) -> convert_indents(Out ++ [{'begin',Line,New}], [New] ++ [Cur] ++ Indents, T)
+    ;length(T) == 0, length(New) == length(Cur) -> convert_indents(Out, [Cur] ++ Indents, T)
     ;length(New) == length(Cur) -> convert_indents(Out ++ [{line,Line}], [Cur] ++ Indents, T)
     ;true -> convert_indents(Out ++ [{'end',Line}], Indents, [{indent,Line,New}] ++ T)
   end
