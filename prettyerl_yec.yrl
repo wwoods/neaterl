@@ -9,6 +9,8 @@
 %When a list is expected, suffix it with _list, and support
 %the empty case when applicable.
 
+%; for inline block ends (any of the _line non terminals)
+
 Nonterminals 
 sep
 module export export_list export_func
@@ -81,6 +83,7 @@ statement_list -> statement_block line statement_list : '$1' ++ '$3'.
 
 statement_line -> statement : stmts_to_list('$1').
 statement_line -> statement ',' statement_line : stmts_to_list('$1') ++ '$3'.
+statement_line -> statement ';' : stmts_to_list('$1').
 
 statement -> expression : '$1'.
 
@@ -130,7 +133,7 @@ branch_list -> branch : [ '$1' ].
 branch_list -> branch line branch_list : [ '$1' ] ++ '$3'.
 
 branch_line -> branch : [ '$1' ].
-branch_line -> branch ',' branch_line : [ '$1' ] ++ '$3'.
+branch_line -> branch branch_line : [ '$1' ] ++ '$2'.
 
 branch -> guard_expression '->' statement_block : { branch, line_of('$1'), '$1', '$3' }.
 branch -> 'after' expression '->' statement_block : { 'after', line_of('$1'), '$2', '$4' }.
@@ -141,7 +144,7 @@ anon_fun_clause_block -> anon_fun_clause_line : '$1'.
 anon_fun_clause_block -> 'begin' anon_fun_clause_list 'end' : [ '$1' ] ++ '$2'.
 
 anon_fun_clause_line -> anon_fun_clause : [ '$1' ].
-anon_fun_clause_line -> anon_fun_clause ',' anon_fun_clause_line : [ '$1' ] ++ '$3'.
+anon_fun_clause_line -> anon_fun_clause anon_fun_clause_line : [ '$1' ] ++ '$2'.
 
 anon_fun_clause_list -> anon_fun_clause : [ '$1' ].
 anon_fun_clause_list -> anon_fun_clause line anon_fun_clause_list : [ '$1' ] ++ '$3'.
@@ -164,10 +167,10 @@ sep -> line : nil.
 sep -> ',' : nil.
 
 list -> '[' ']' : { list, [] }.
-list -> '[' arg_list ']' : { list, line_of('$1'), '$2' }.
+list -> '[' arg_parts ']' : { list, line_of('$1'), '$2' }.
 
 tuple -> '{' '}' : { tuple, [] }.
-tuple -> '{' arg_list '}' : { tuple, line_of('$1'), '$2' }.
+tuple -> '{' arg_parts '}' : { tuple, line_of('$1'), '$2' }.
 
 Erlang code.
 constant_from({_,Line,Value}) ->
