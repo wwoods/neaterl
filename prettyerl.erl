@@ -1,5 +1,5 @@
 -module(prettyerl).
--export([ test/0, compile/1, file/1, file/2, string/2, string/3, convert/1 ]).
+-export([ test/0, compile/1, compile/2, file/1, file/2, string/2, string/3, convert/1 ]).
 
 %Walt Woods, 4 June 2010
 %Idea that erlang can be pretty... Python-inspired indented syntax.
@@ -46,6 +46,20 @@ compile(File) ->
     ;error -> error
   end
   .
+  
+compile(File,debug) when is_atom(File) ->
+  compile(atom_to_list(File),debug)
+  ;
+compile(File,debug) ->
+  {ok,Module} = file(File,debug)
+  ,case compile:file(Module) of
+    {ok,ModName} ->
+      code:purge(ModName)
+      ,code:load_file(ModName)
+      ,{ok,ModName}
+    ;error -> error
+  end
+  .
 
 file(Atom) when is_atom(Atom) ->
   file(atom_to_list(Atom))
@@ -82,9 +96,9 @@ string(String, Outfile, debug) ->
   .
 
 reload(Module) ->
-  compile:file(Module)
-  ,code:purge(Module)
-  ,code:load_file(Module)
+  {ok,ModName} = compile:file(Module)
+  ,code:purge(ModName)
+  ,{module,ModName} = code:load_file(Module)
   ,ok
   .
 
@@ -93,12 +107,38 @@ test() ->
   ,ok = reload(prettyerl_lex)
   ,{ok,_} = yecc:file(prettyerl_yec)
   ,ok=reload(prettyerl_yec)
-  ,B=element(2, prettyerl_lex:string("-module(test)\n-export([hello_world/0,fac/1])\n\nhello_world() -> io:format(\"~p~n\", \"Hello, world!\")\n\nfac(0) -> 1\nfac(N) -> \n  N * fac(N-1)\n\nblah(N) when is_atom(N) -> whentop\nblah(N) -> is_integer(N), N>0"))
-  ,io:format("Tokenized: ~p~n", [B])
-  ,{ok,P}=prettyerl_yec:parse(B)
+  ,{ok,B,_}=prettyerl_lex:string("-module(test)\n-export([hello_world/0,fac/1])\n\nhello_world() -> io:format(\"~p~n\", \"Hello, world!\")\n\nfac(0) -> 1\nfac(N) -> \n  N * fac(N-1)\n\nblah(N) when is_atom(N) -> whentop\nblah(N) -> is_integer(N), N>0")
+  ,{ok,C}=convert_indents(B)
+  ,io:format("Tokenized: ~p~n", [C])
+  ,{ok,P}=prettyerl_yec:parse(C)
   ,io:format("Parsed: ~p~n", [P])
   ,io:format("Final:~n~s~n", [ convert(P) ])
   ,all_tests_passed
+  .
+  
+convert_indents(List) ->
+  Out=convert_indents([], [""], List)
+  ,{ok,Out}
+  .
+  
+convert_indents(Out, [Cur,Next|Indents], []) ->
+  convert_indents(Out ++ [{'end', element(2, lists:last(Out))}], [Next] ++ Indents, [])
+  ;
+convert_indents(Out, [Single|_], []) ->
+  Out
+  ;
+convert_indents(Out, Indents, [{indent,Line,New},{indent,NextLine,NextText}|T]) ->
+  convert_indents(Out, Indents, [{indent,NextLine,NextText}] ++ T)
+  ;
+convert_indents(Out, [Cur|Indents], [{indent,Line,New}|T]) ->
+  if
+    length(New) > length(Cur) -> convert_indents(Out ++ [{'begin',Line,New}], [New] ++ [Cur] ++ Indents, T)
+    ;length(New) == length(Cur) -> convert_indents(Out ++ [{line,Line}], [Cur] ++ Indents, T)
+    ;true -> convert_indents(Out ++ [{'end',Line}], Indents, [{indent,Line,New}] ++ T)
+  end
+  ;
+convert_indents(Out, Indents, [H|T]) ->
+  convert_indents(Out ++ [H], Indents, T)
   .
   
 convert_goto_line(CurOut, CurLine, []) -> 
@@ -145,7 +185,7 @@ convert_arglist(Out, [','|T]) ->
 convert_arglist(Out, [Other|T]) ->
   %Dirty shortcut to prevent code duplication; should be ok though,
   %as yecc will only allow certain statement types to pass through.
-  convert_arglist(Out ++ convert_stmt("", [], [], [Other]), T)
+  convert_arglist(Out ++ convert_stmt(Other), T)
   .
   
 % MAIN PARSER
@@ -254,7 +294,7 @@ convert_stmt(Out, Indents, NewFlags, [{'if'}|T]) ->
     )
   ;
 convert_stmt(Out, Indents, NewFlags, [{branch_condition,Expr}|T]) ->
-  convert(Out ++ convert_stmt(Expr) ++ " -> "
+  convert(Out ++ "(" ++ convert_stmt(Expr) ++ ")" ++ " -> "
     , Indents, { indent,[comma] }
     , T
     )
@@ -281,6 +321,33 @@ convert_stmt(Out, Indents, NewFlags, [{funccall, Name, Args}|T]) ->
   convert(Out ++ convert_stmt(list_insert({ constant, ":" }, Name)) ++ "(" 
     ++ convert_arglist(Args)
     ++ ")"
+    , Indents, NewFlags
+    , T
+    )
+  ;
+convert_stmt(Out, Indents, NewFlags, [{'fun'}|T]) ->
+  convert(Out ++ "fun"
+    , Indents, { indent, [semicolon,'end'] }
+    , T
+    )
+  ;
+convert_stmt(Out, Indents, NewFlags, [{fun_inline, Clauses}|T]) ->
+  io:format("Called convert_stmt 3~n"),
+  convert(Out ++ "fun" %++ convert_stmt(list_insert({ constant, ";" }, Clauses))
+    , Indents, NewFlags
+    , T
+    )
+  ;
+convert_stmt(Out, Indents, NewFlags, [{fun_clause, Args, []}|T]) ->
+  io:format("Called convert_stmt 1~n"),
+  convert(Out ++ " (" ++ convert_arglist(Args) ++ ") -> "
+    , Indents, { indent, [semicolon,'end'] }
+    , T
+    )
+  ;
+convert_stmt(Out, Indents, NewFlags, [{fun_clause, Args, Stmts}|T]) ->
+  io:format("Called convert_stmt 2 ~p ~p~n", [Args, list_insert({ constant, "," }, Stmts)]),
+  convert(Out ++ " (" ++ convert_arglist(Args) ++ ") -> " ++ convert_stmt(list_insert({constant, "," }, Stmts))
     , Indents, NewFlags
     , T
     )
@@ -328,7 +395,7 @@ convert_stmt(Out, Indents, NewFlags, [{constant,Text}|T]) ->
     )
   ;
 convert_stmt(Out, Indents, NewFlags, [Unknown|T]) ->
-  convert(Out ++ io_lib:format("<Unknown - ~p>", [ element(1, Unknown) ])
+  convert(Out ++ io_lib:format("<Unknown - ~p / ~p>", [ element(1, Unknown), Unknown ])
     , Indents, NewFlags, T)
   .
   
