@@ -137,314 +137,168 @@ convert_indents(Out, [Cur|Indents], [{indent,Line,New}|T]) ->
     length(New) > length(Cur) -> convert_indents(Out ++ [{'begin',Line,New}], [New] ++ [Cur] ++ Indents, T)
     ;length(T) == 0, length(New) == length(Cur) -> convert_indents(Out, [Cur] ++ Indents, T)
     ;length(New) == length(Cur) -> convert_indents(Out ++ [{line,Line}], [Cur] ++ Indents, T)
-    ;true -> convert_indents(Out ++ [{'end',Line}], Indents, [{indent,Line,New}] ++ T)
+    ;true -> convert_indents(Out ++ [{'end',Line,New}], Indents, [{indent,Line,New}] ++ T)
   end
   ;
 convert_indents(Out, Indents, [H|T]) ->
   convert_indents(Out ++ [H], Indents, T)
   .
   
-convert_goto_line(CurOut, CurLine, []) -> 
-  CurOut
+convert_output(Out, Line, Indent, []) ->
+  Out
   ;
-convert_goto_line(CurOut, CurLine, [{goto_line, Line, Indent}|T]) when CurLine == Line ->
-  convert_goto_line(CurOut ++ Indent, CurLine, T)
+convert_output(Out, Line, Indent, [{line, nil}|T]) ->
+  convert_output(Out, Line, Indent, T)
   ;
-convert_goto_line(CurOut, CurLine, [{goto_line, Line, Indent}|T]) when CurLine < Line ->
-  convert_goto_line(CurOut ++ "\n", CurLine + 1, [{goto_line, Line, Indent}] ++ T)
+convert_output(Out, Line, Indent, [{line, L}|T]) ->
+  if 
+    L > Line -> 
+      convert_output(Out ++ lists:flatten(lists:map(fun(X) -> "\n" end, lists:seq(Line+1, L)))
+        ++ Indent
+        , L, Indent, T
+        )
+    ;L == Line -> convert_output(Out, Line, Indent, T)
+    end
   ;
-convert_goto_line(CurOut, CurLine, [H|T]) ->
-  convert_goto_line(CurOut ++ [H], CurLine, T)
-  
-.
-  
+convert_output(Out, Line, Indent, [{indent, I}|T]) ->
+  convert_output(Out, Line, I, T)
+  ;
+convert_output(Out, Line, Indent, [H|T]) when is_integer(H) ->
+  convert_output(Out ++ [ H ], Line, Indent, T)
+  .
 
 convert({module, Name, Exports, Stmts}) ->
   Out=lists:flatten([ 
     io_lib:format("-module(~s).", [Name])
-    ,{ goto_line, 2, "" }
+    ,{ line, 2 }
     ,"-export(["
-    , convert_arglist(Exports)
+    , convert_stmts(",", Exports)
     , io_lib:format("]).", [])
-    , { goto_line, 3, "" }
+    , { line, 3 }
+    , convert("", Stmts)
     ])
-  ,Out2 = lists:flatten(convert(Out, [{"",[]}], nil, Stmts))
-  ,convert_goto_line("", 1, Out2)
+  ,convert_output("", 1, "", Out)
   .
   
-convert_arglist(List) ->
-  convert_arglist("", comma_delimit(List))
-  .
-  
-convert_arglist(Out, []) ->
-  Out
-  ;
-convert_arglist(Out, [{export,Func,ArgCount}|T]) ->
-  convert_arglist(Out ++ io_lib:format("~s/~p", [ Func, ArgCount ]), T)
-  ;
-convert_arglist(Out, [','|T]) ->
-  convert_arglist(Out ++ ",", T)
-  ;
-convert_arglist(Out, [Other|T]) ->
-  %Dirty shortcut to prevent code duplication; should be ok though,
-  %as yecc will only allow certain statement types to pass through.
-  convert_arglist(Out ++ convert_stmt(Other), T)
-  .
-  
-% MAIN PARSER
-convert(Out, [], NewFlags, []) ->
-  Out
-  ;
-convert(Out, [{_,IFlags}|Indents], NewFlags, []) ->
-  convert(Out ++ convert_deindent(IFlags), Indents, NewFlags, [])
-  ;
-convert(Out, Indents, NewFlags, [{{indent,Line,Indent},[]}|T]) ->
-  %Ignore blank lines
-  convert(Out, Indents, NewFlags, T)
-  ;
-convert(Out, Indents, NewFlags, [{verbatim, Output}|T]) ->
-  convert(Out ++ Output, Indents, NewFlags, T)
-  ;
-% HANDLE INDENTATION CHANGES
-convert(Out, [{nonindent,IFlags}|Indents], NewFlags, [{{indent,Line,New},Stmts}|T]) ->
-  %Handles when an indent was a single line
-  convert(Out ++ convert_deindent(IFlags)
-    , Indents, NewFlags, [{{indent,Line,New},Stmts}] ++ T)
-  ;
-convert(Out, [{Cur,F}|Indents], nil, [{{indent,Line,New},Stmts}|T]) when not (Cur == New) ->
-  case lists:prefix(New, Cur) of
-    false -> io_lib:format("Unexpected indent, line ~p", [ Line ])
-    ;true ->
-      convert(Out ++ convert_deindent("", F), Indents, nil, [{{indent,Line,New},Stmts}] ++ T)
-  end
-  ;
-convert(Out, [{Cur,_}|_], {indent,_}, [{{indent,Line,New},_}|_]) when Cur == New ->
-  io_lib:format("Expected indent, line ~p", [ Line ])
-  ;
-convert(Out, [{Cur,F}|Indents], {indent,IFlags}, [{{indent,Line,New},Stmts}|T]) ->
-  case lists:prefix(Cur, New) of
-    false -> io_lib:format("Expected indent, line ~p", [ Line ])
-    ;true ->
-      convert(
-        Out ++ [ { goto_line, Line, New } ]
-        , [{New,[first] ++ IFlags}] ++ [{Cur,F}] ++ Indents
-        , nil
-        , Stmts ++ T
-        )
-  end
-  ;
-convert(Out, Indents, {indent,IFlags}, [Stmt|T]) ->
-  %Stmt is NOT {{indent,_,_},_}, so is a one-line indented clause.
-  convert(Out, [{nonindent, [first] ++ IFlags}] ++ Indents, nil, [Stmt] ++ T)
-  ;
-convert(Out, Indents, NewFlags, [{{indent,Line,Indent},Stmts}|T]) ->
-  convert(Out ++ [ { goto_line, Line, Indent } ], Indents, NewFlags, Stmts ++ T)
-  ;
-% HANDLE STATEMENTS
-convert(Out, [{Cur,[first|Rest]}|Indents], NewFlags, Any) ->
-  convert_stmt(Out, [{Cur,Rest}] ++ Indents, NewFlags, Any)
-  ;
-convert(Out, Indents, NewFlags, [{'after',Timeout,Stmts}|T]) ->
-  %ODDITY HANDLING: after clauses don't use level flags..
-  convert_stmt(Out, Indents, NewFlags, [{'after',Timeout,Stmts}] ++ T)
-  ;
-convert(Out, Indents, NewFlags, Any) ->
-  convert_stmt(Out ++ convert_level_flags(Indents), Indents, NewFlags, Any)
-  .
-  
-convert_stmt(Single) when not is_list(Single) ->
-  convert_stmt("", [], [], [ Single ])
-  ;
-convert_stmt(Single) ->
-  convert_stmt("", [{"",[]}], [], Single )
+convert_stmts(Stmts) ->
+  convert_stmts("", Stmts)
   .
 
-%Looks for a new function definition; unwraps indent loops
-next_func_def([]) -> nil
-;next_func_def([{{indent,_,_},Stmts}|T]) -> next_func_def(Stmts ++ T)
-;next_func_def([{function_def,Name,Args,When}|T]) -> {function_def,Name,Args,When}
-;next_func_def([H|T]) -> next_func_def(T)
-.
-  
-convert_stmt(Out, Indents, NewFlags, [{function_def,Name,Args,When}|T]) ->
-  EndType = case next_func_def(T) of
-      {function_def,Name,Args2,_} when length(Args) == length(Args2) ->
-        func_sep
-      ;_ -> func_end
-    end
-  ,
-  WhenPart = case When of
-      nil -> ""
-      ;_ -> " when " ++ convert_stmt(When)
-    end
-  ,
-  convert(Out ++ io_lib:format("~p(", [ Name ]) 
-    ++ convert_arglist(Args) ++ ")" ++ WhenPart ++ " -> "
-    , Indents, {indent,[comma,EndType]}
-    , T
-    )
+convert_stmts(Delimit, []) ->
+  ""
   ;
-convert_stmt(Out, Indents, NewFlags, [{'case', Expr}|T]) ->
-  convert(Out ++ "case " ++ convert_stmt(Expr) ++ " of "
-    , Indents, {indent,[semicolon,'end']}
-    , T
-    )
+convert_stmts(Delimit, Stmts) when not is_list(Stmts) ->
+  convert("", [ Stmts ])
   ;
-convert_stmt(Out, Indents, NewFlags, [{'if'}|T]) ->
-  convert(Out ++ "if "
-    , Indents, {indent,[semicolon,'end']}
-    , T
-    )
+convert_stmts(Delimit, Stmts) when is_list(Delimit) ->
+  convert_stmts({constant, nil, Delimit}, Stmts)
   ;
-convert_stmt(Out, Indents, NewFlags, [{branch_condition,Expr}|T]) ->
-  convert(Out ++ "(" ++ convert_stmt(Expr) ++ ")" ++ " -> "
-    , Indents, { indent,[comma] }
-    , T
-    )
-  ;
-convert_stmt(Out, Indents, NewFlags, [{'send', Proc, Message}|T]) ->
-  convert(Out ++ convert_stmt(Proc) ++ " ! " ++ convert_stmt(Message)
-    , Indents, NewFlags
-    , T
-    )
-  ;
-convert_stmt(Out, Indents, NewFlags, [{'receive', Stmts}|T]) ->
-  convert(Out ++ "receive "
-    , Indents, { indent, [semicolon,'end'] }
-    , Stmts ++ T
-    )
-  ;
-convert_stmt(Out, Indents, NewFlags, [{'after', Timeout, Stmts}|T]) ->
-  convert(Out ++ "after " ++ convert_stmt(Timeout) ++ " -> "
-    , Indents, { indent, [comma] }
-    , Stmts ++ T
-    )
-  ;
-convert_stmt(Out, Indents, NewFlags, [{funccall, Name, Args}|T]) ->
-  convert(Out ++ convert_stmt(list_insert({ constant, ":" }, Name)) ++ "(" 
-    ++ convert_arglist(Args)
-    ++ ")"
-    , Indents, NewFlags
-    , T
-    )
-  ;
-convert_stmt(Out, Indents, NewFlags, [{'fun'}|T]) ->
-  convert(Out ++ "fun"
-    , Indents, { indent, [semicolon,'end'] }
-    , T
-    )
-  ;
-convert_stmt(Out, Indents, NewFlags, [{fun_inline, Clauses}|T]) ->
-  io:format("Called convert_stmt 3~n"),
-  convert(Out ++ "fun" %++ convert_stmt(list_insert({ constant, ";" }, Clauses))
-    , Indents, NewFlags
-    , T
-    )
-  ;
-convert_stmt(Out, Indents, NewFlags, [{fun_clause, Args, []}|T]) ->
-  io:format("Called convert_stmt 1~n"),
-  convert(Out ++ " (" ++ convert_arglist(Args) ++ ") -> "
-    , Indents, { indent, [semicolon,'end'] }
-    , T
-    )
-  ;
-convert_stmt(Out, Indents, NewFlags, [{fun_clause, Args, Stmts}|T]) ->
-  io:format("Called convert_stmt 2 ~p ~p~n", [Args, list_insert({ constant, "," }, Stmts)]),
-  convert(Out ++ " (" ++ convert_arglist(Args) ++ ") -> " ++ convert_stmt(list_insert({constant, "," }, Stmts))
-    , Indents, NewFlags
-    , T
-    )
-  ;
-convert_stmt(Out, Indents, NewFlags, [{binary_op,Op,Left,Right}|T]) ->
-  convert(Out ++ "(" ++ convert_stmt(Left) ++ ")" ++ Op ++ "(" ++ convert_stmt(Right) ++ ")"
-    , Indents, NewFlags
-    , T
-    )
-  ;
-convert_stmt(Out, Indents, NewFlags, [{unary_op,Op,Left}|T]) ->
-  convert(Out ++ Op ++ "(" ++ convert_stmt(Left) ++ ")"
-    , Indents, NewFlags
-    , T
-    )
-  ;
-convert_stmt(Out, Indents, NewFlags, [{list, Args}|T]) ->
-  convert(Out ++ "[" ++ convert_arglist(Args) ++ "]"
-    , Indents, NewFlags
-    , T
-    )
-  ;
-convert_stmt(Out, Indents, NewFlags, [{tuple, Args}|T]) ->
-  convert(Out ++ "{" ++ convert_arglist(Args) ++ "}"
-    , Indents, NewFlags
-    , T
-    )
-  ;
-convert_stmt(Out, Indents, NewFlags, [{macro, Symbol, nil}|T]) ->
-  convert(Out ++ Symbol
-    , Indents, NewFlags
-    , T
-    )
-  ;
-convert_stmt(Out, Indents, NewFlags, [{macro, Symbol, Args}|T]) ->
-  convert(Out ++ Symbol ++ "(" ++ convert_arglist(Args) ++ ")"
-    , Indents, NewFlags
-    , T
-    )
-  ;
-convert_stmt(Out, Indents, NewFlags, [{constant,Text}|T]) ->
-  convert(Out ++ Text
-    , Indents, NewFlags
-    , T
-    )
-  ;
-convert_stmt(Out, Indents, NewFlags, [Unknown|T]) ->
-  convert(Out ++ io_lib:format("<Unknown - ~p / ~p>", [ element(1, Unknown), Unknown ])
-    , Indents, NewFlags, T)
-  .
-  
-convert_level_flags([{_, Flags}|_]) ->
-  convert_level_flags2("", Flags)
+convert_stmts(Delimit, Stmts) ->
+  convert("", list_insert(Delimit, Stmts))
   .
 
-convert_level_flags2(Out, []) ->
+convert(Out, []) ->
   Out
   ;
-convert_level_flags2(Out, [comma|T]) ->
-  convert_level_flags2(Out ++ ",", T)
+convert(Out, [H|T]) when element(1, H) == 'begin'; element(1, H) == 'end' ->
+  convert(Out ++ convert2(H, nil), T)
   ;
-convert_level_flags2(Out, [semicolon|T]) ->
-  convert_level_flags2(Out ++ ";", T)
+convert(Out, [H,Peek|T]) ->
+  convert(Out ++ [ { line, element(2, H) } ] ++ convert2(H, Peek), [ Peek ] ++ T)
   ;
-convert_level_flags2(Out, [H|T]) ->
-  %Do nothing for unknown; assume it's a deindent
-  convert_level_flags2(Out, T)
+convert(Out, [H|T]) ->
+  convert(Out ++ [ { line, element(2, H) } ] ++ convert2(H, nil), T)
   .
   
-convert_deindent(List) when is_list(List) ->
-  convert_deindent("", List)
+convert2({export,_Line,Func,ArgCount}, Next) ->
+  io_lib:format("~s/~p", [ Func, ArgCount ])
+  ;
+convert2({'begin',Line,Indent}, Next) ->
+  [ { indent, Indent}, { line, Line } ]
+  ;
+convert2({'end',Line,Indent}, Next) ->
+  [ { indent, Indent} ]
+  ;
+convert2({constant,_Line,String}, Next) ->
+  String
+  ;
+convert2({function_def,_Line,Name,Body}, Next) ->
+  Term = case function_def_match({function_def,_Line,Name,Body}, Next) of
+    true -> ";"
+    ;false -> "."
+    end
+  ,Name ++ convert_stmts(Body) ++ Term
+  ;
+convert2({function_body, _, Args, When, Body}, Next) ->
+  WhenPart = if
+    When == nil -> ""
+    ;true -> " when " ++ convert_stmts(When)
+    end
+  ,convert_stmts(Args) ++ WhenPart ++ " -> " ++ convert_stmts(",", Body)
+  ;
+convert2({arg_list, _, Args}, Next) ->
+  "(" ++ convert_stmts(", ", Args) ++ ")"
+  ;
+convert2({funccall, Line, Names, Args}, Next) ->
+  convert_stmts(":", Names) ++ convert_stmts(Args)
+  ;
+convert2({'case', Line, Expr, Branches}, Next) ->
+  "case " ++ convert_stmts(Expr) ++ " of " ++ convert_stmts("; ", Branches) ++ " end"
+  ;
+convert2({'if', Line, Branches}, Next) ->
+  "if " ++ convert_stmts("; ", Branches) ++ " end"
+  ;
+convert2({'receive', Line, Branches}, Next) ->
+  "receive " ++ convert_stmts("; ", Branches) ++ " end"
+  ;
+convert2({branch, Line, Expr, Stmts}, Next) ->
+  convert_stmts(Expr) ++ " -> " ++ convert_stmts(", ", Stmts)
+  ;
+convert2({'after', Line, Expr, Stmts}, Next) ->
+  "after " ++ convert_stmts(Expr) ++ " -> " ++ convert_stmts(", ", Stmts)
+  ;
+convert2({'fun', Line, Clauses}, Next) ->
+  "fun " ++ convert_stmts("; ", Clauses) ++ " end"
+  ;
+convert2({macro, Line, Name, nil}, Next) ->
+  Name
+  ;
+convert2({macro, Line, Name, Args}, Next) ->
+  Name ++ convert_stmts(Args)
+  ;
+convert2({binary_op, Line, Symbol, Left, Right}, Next) ->
+  "(" ++ convert_stmts(Left) ++ ")" ++ Symbol ++ "(" ++ convert_stmts(Right) ++ ")"
+  ;
+convert2({unary_op, Line, Symbol, Right}, Next) ->
+  Symbol ++ "(" ++ convert_stmts(Right) ++ ")"
+  ;
+convert2({ list, Line, Args }, Next) ->
+  "[" ++ convert_stmts(", ", Args) ++ "]"
+  ;
+convert2({ tuple, Line, Args }, Next) ->
+  "{" ++ convert_stmts(", ", Args) ++ "}"
+  ;
+convert2(H, Next) ->
+  io_lib:format("<Unknown ~p>", [ element(1, H) ])
   .
   
-convert_deindent(Out, []) ->
-  Out
+function_def_match(
+  {function_def, _, Name1, {function_body,_,{arg_list,_,Args1},_,_}}
+  , {function_def, _, Name2, {function_body,_,{arg_list,_,Args2},_,_}}) ->
+  if 
+    Name1 == Name2, length(Args1) == length(Args2) ->
+      true
+    ;true -> false
+    end
   ;
-convert_deindent(Out, [func_sep|T]) ->
-  convert_deindent(Out ++ ";", T)
-  ;
-convert_deindent(Out, [func_end|T]) ->
-  convert_deindent(Out ++ ".", T)
-  ;
-convert_deindent(Out, ['end'|T]) ->
-  convert_deindent(Out ++ " end", T)
-  ;
-convert_deindent(Out, [semicolon|T]) ->
-  %Level flag - do nothing
-  convert_deindent(Out, T)
-  ;
-convert_deindent(Out, [comma|T]) ->
-  %Level flag - do nothing
-  convert_deindent(Out, T)
+function_def_match({function_def, _, Name1, {function_body,_,{arg_list,_,Args1},_,_}}, B) ->
+  false
   .
   
+list_insert(Symbol, [H|List]) when element(1, H) == 'begin' ->
+  [_|Result] = list_insert([], Symbol, List)
+  ,[H] ++ Result
+  ;
 list_insert(Symbol, List) ->
   [_|Result] = list_insert([], Symbol, List)
   ,Result
@@ -453,22 +307,9 @@ list_insert(Symbol, List) ->
 list_insert(Out, Symbol, []) ->
   Out
   ;
+list_insert(Out, Symbol, [H|T]) when element(1, H) == 'end'; element(1, H) == 'after' ->
+  list_insert(Out ++ [H], Symbol, T)
+  ;
 list_insert(Out, Symbol, [H|T]) ->
   list_insert(Out ++ [ Symbol ] ++ [H], Symbol, T)
   .
-
-comma_delimit([]) ->
-  []
-  ;
-comma_delimit(List) ->
-  L=comma_insert(List)
-  ,lists:sublist(L, length(L) - 1)
-  .
-  
-comma_insert([H|T]) ->
-  [H,','] ++ comma_insert(T)
-  ;
-comma_insert([]) ->
-  []
-  .
-  

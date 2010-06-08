@@ -72,11 +72,11 @@ module_statement_list -> module_statement : stmts_to_list('$1').
 module_statement_list -> module_statement line module_statement_list : stmts_to_list('$1') ++ '$3'.
 module_statement_list -> line : [].
 
-module_statement -> atom func_def_body : { function_def, line_of('$1'), value_of('$1'), '$2' }.
+module_statement -> atom func_def_body : { function_def, line_of('$1'), list_value_of('$1'), '$2' }.
 module_statement -> preproc : { constant, line_of('$1'), list_value_of('$1') ++ "." }.
 
 statement_block -> statement_line : '$1'.
-statement_block -> 'begin' statement_list 'end' : [ '$1' ] ++ '$2'.
+statement_block -> 'begin' statement_list 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].
 
 statement_list -> statement_block : '$1'.
 statement_list -> statement_block line statement_list : '$1' ++ '$3'.
@@ -100,7 +100,7 @@ expression -> anon_fun : '$1'.
 expression -> list : '$1'.
 expression -> tuple : '$1'.
 expression -> expression_atom : '$1'.
-expression -> expression '!' expression : { 'send', line_of('$1'), '$1', '$3' }.
+expression -> expression '!' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
 expression -> expression '>' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
 expression -> expression '<' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
 expression -> expression '>=' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
@@ -118,15 +118,14 @@ uminus -> '-' expression : { unary_op, line_of('$1'), "-", '$2' }.
 
 expression_atom -> atom : constant_from('$1').
 expression_atom -> macro : { macro, line_of('$1'), list_value_of('$1'), nil }.
-expression_atom -> macro '(' ')' : { macro, line_of('$1'), list_value_of('$1'), [] }.
-expression_atom -> macro '(' arg_list ')' : { constant, line_of('$1'), list_value_of('$1'), '$3' }.
+expression_atom -> macro arg_list : { macro, line_of('$1'), list_value_of('$1'), '$2' }.
 expression_atom -> variable : constant_from('$1').
 expression_atom -> integer : constant_from('$1').
 expression_atom -> float : constant_from('$1').
 expression_atom -> string : constant_from('$1').
 expression_atom -> '(' expression ')' : '$2'.
 
-branch_block -> 'begin' branch_list 'end' : [ '$1' ] ++ '$2'.
+branch_block -> 'begin' branch_list 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].
 branch_block -> branch_line : '$1'.
 
 branch_list -> branch : [ '$1' ].
@@ -141,7 +140,7 @@ branch -> 'after' expression '->' statement_block : { 'after', line_of('$1'), '$
 anon_fun -> 'fun' anon_fun_clause_block : { 'fun', line_of('$1'), '$2' }.
 
 anon_fun_clause_block -> anon_fun_clause_line : '$1'.
-anon_fun_clause_block -> 'begin' anon_fun_clause_list 'end' : [ '$1' ] ++ '$2'.
+anon_fun_clause_block -> 'begin' anon_fun_clause_list 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].
 
 anon_fun_clause_line -> anon_fun_clause : [ '$1' ].
 anon_fun_clause_line -> anon_fun_clause anon_fun_clause_line : [ '$1' ] ++ '$2'.
@@ -154,8 +153,8 @@ anon_fun_clause -> func_def_body : '$1'.
 func_call -> expression_atom arg_list : { funccall, line_of('$1'), [ '$1' ], '$2' }.
 func_call -> expression_atom ':' func_call : { funccall, line_of('$1'), [ '$1' ] ++ element(3, '$3'), element(4, '$3') }.
 
-arg_list -> '(' ')' : [].
-arg_list -> '(' arg_parts ')' : '$2'.
+arg_list -> '(' ')' : { arg_list, line_of('$1'), [] }.
+arg_list -> '(' arg_parts ')' : { arg_list, line_of('$1'), '$2' }.
 arg_parts -> expression : [ '$1' ].
 arg_parts -> expression sep arg_parts : [ '$1' ] ++ '$3'.
 

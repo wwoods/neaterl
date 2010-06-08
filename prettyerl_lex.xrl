@@ -19,7 +19,7 @@ Rules.
   {token,{prep_export,TokenLine}}.
 -----([^e]|e[^x]|ex[^p])[^\n]* :
   [_,_,_,_|A] = TokenChars
-  ,{token,{preproc,TokenLine+1,A}}. %+1 Since line counted before \n
+  ,{token,{preproc,TokenLine,A}}.
 \n\s* :
   [_|A] = TokenChars
   ,{token,{indent,TokenLine+1,A}}. %+1 Since the line is counted before the \n
