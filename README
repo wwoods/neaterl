@@ -1,4 +1,23 @@
-prettyerl
+neaterl
 Erlang alternative syntax based on indentation rather than punctuation
 Software authored by Walt Woods, project start date 6 June 2010
 
+-BASIC USAGE-
+Create a file with a .erln extension, such as test.erln.
+
+Copy the following into it:
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-module(test)
+-export([ hello_world/0, fac/1 ])
+
+hello_world() -> io:format("Hello, World!~n", [])
+
+fac(0) -> 1
+fac(N) when is_integer(N) andalso N > 0 ->
+  N * fac(N - 1)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Then, open up an erlang prompt, run "neaterl:compile(test).",
+and the files test.erl and test.beam will be created, allowing
+normal usage of the test module.
+  

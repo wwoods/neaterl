@@ -1,4 +1,4 @@
-%Pretty erlang grammar
+%Neat / tidy erlang grammar
 
 %TODO - Capitalize Nonterminals.
 

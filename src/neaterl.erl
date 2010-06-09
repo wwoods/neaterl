@@ -1,10 +1,10 @@
--module(prettyerl).
+-module(neaterl).
 -export([ compile/1, compile/2, file/1, file/2, string/2, string/3, convert/1 ]).
 
 -include_lib("eunit/include/eunit.hrl").
 
 %Walt Woods, 4 June 2010
-%Idea that erlang can be pretty... Python-inspired indented syntax.
+%Idea that erlang can be neat and tidy ... Python-inspired indented syntax.
 %No more '.' for function ends
 %No more 'end' keyword at all (though it can be used, it isn't parsed)
 %No more ',' for "Then do this" (Unless two statements are on the same line)
@@ -67,32 +67,32 @@ file(Atom) when is_atom(Atom) ->
   file(atom_to_list(Atom))
   ;
 file(Name) ->
-  In = Name ++ ".erlp"
+  In = Name ++ ".erln"
   ,Out = Name ++ ".erl"
   ,Text = lists:flatten(readlines(In))
   ,string(Text, Out)
   .
   
 file(Name, debug) ->
-  In = Name ++ ".erlp"
+  In = Name ++ ".erln"
   ,Out = Name ++ ".erl"
   ,Text = lists:flatten(readlines(In))
   ,string(Text, Out, debug)
   .
   
 string(String, Outfile) ->
-  {ok,B,_}=prettyerl_lex:string(String)
+  {ok,B,_}=neaterl_lex:string(String)
   ,{ok,L}=convert_indents(B)
-  ,{ok,Y}=prettyerl_yec:parse(L)
+  ,{ok,Y}=neaterl_yec:parse(L)
   ,C=convert(Y)
   ,writefile(Outfile, C)
   .
   
 string(String, Outfile, debug) ->
-  {ok,B,_}=prettyerl_lex:string(String)
+  {ok,B,_}=neaterl_lex:string(String)
   ,{ok,L}=convert_indents(B)
   ,io:format("Lexed: ~p~n", [L])
-  ,{ok,Y}=prettyerl_yec:parse(L)
+  ,{ok,Y}=neaterl_yec:parse(L)
   ,io:format("Parsed: ~p~n", [Y])
   ,C=convert(Y)
   ,io:format("Output:~n~s~n", [C])
@@ -302,7 +302,7 @@ list_insert(Out, Symbol, [H|T]) ->
   list_insert(Out ++ [ Symbol ] ++ [H], Symbol, T)
   .
 
-%% Pretty Erl Tests
+%% Neat Erl Tests
 
 compile_test() ->
   {ok,J} = compile("examples/example")
