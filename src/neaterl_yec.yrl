@@ -27,7 +27,7 @@ anon_fun anon_fun_clause_block anon_fun_clause_line anon_fun_clause_list anon_fu
 .
 
 Terminals 
-'(' ')' '@' '[' ']' '{' '}' '+' '-' '/' '*' '.' '>' '<'
+'(' ')' '@' '[' ']' '{' '}' '+' '-' '/' '*' '.' '>' '<' '|'
 '->' '++' '--' '!' ':' ';' '=' '==' '>=' '<='
 line 'begin' 'end' ','
 atom float integer variable string macro
@@ -172,8 +172,9 @@ func_def_body -> arg_list 'when' guard_expression '->' statement_block : { funct
 sep -> line : nil.
 sep -> ',' : nil.
 
-list -> '[' ']' : { list, [] }.
-list -> '[' arg_parts ']' : { list, line_of('$1'), '$2' }.
+list -> '[' ']' : { list, line_of('$1'), [], nil }.
+list -> '[' arg_parts ']' : { list, line_of('$1'), '$2', nil }.
+list -> '[' arg_parts '|' variable ']' : { list, line_of('$1'), '$2', constant_from('$4') }.
 
 tuple -> '{' '}' : { tuple, [] }.
 tuple -> '{' arg_parts '}' : { tuple, line_of('$1'), '$2' }.

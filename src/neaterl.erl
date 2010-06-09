@@ -112,7 +112,7 @@ convert_indents(List) ->
   .
   
 convert_indents(Out, [Cur,Next|Indents], []) ->
-  convert_indents(Out ++ [{'end', element(2, lists:last(Out))}], [Next] ++ Indents, [])
+  convert_indents(Out ++ [{'end', element(2, lists:last(Out)), ""}], [Next] ++ Indents, [])
   ;
 convert_indents(Out, [Single|_], []) ->
   Out
@@ -260,8 +260,12 @@ convert2({binary_op, Line, Symbol, Left, Right}, Next) ->
 convert2({unary_op, Line, Symbol, Right}, Next) ->
   Symbol ++ "(" ++ convert_stmts(Right) ++ ")"
   ;
-convert2({ list, Line, Args }, Next) ->
-  "[" ++ convert_stmts(", ", Args) ++ "]"
+convert2({ list, Line, Args, Tail }, Next) ->
+  TailPart = case Tail of
+    nil -> ""
+    ;V -> "|" ++ convert_stmts(Tail)
+    end
+  ,"[" ++ convert_stmts(", ", Args) ++ TailPart ++ "]"
   ;
 convert2({ tuple, Line, Args }, Next) ->
   "{" ++ convert_stmts(", ", Args) ++ "}"
