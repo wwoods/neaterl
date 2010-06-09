@@ -1,5 +1,5 @@
 -module(factorial)
--export([fac/1,test/1,anontest/0,comm/0,comm/1,yecc/0])
+-export([fac/1,test/1,anontest/0,comm/0,comm/1,yecc/0,servlet/0,servlet/1])
 
 %Treat ',' and '\n' as same concept (a separator).
 %Allow [,\n] at front of list terms
@@ -28,6 +28,15 @@ anontest() ->
     ({what}, 3) -> yup
   io:format("J: ~s~n", [ J(hi,there) ])
   (fun (hi,there) -> yo; ({what}, 3) -> a, b, c)({what}, 3)
+  
+servlet() ->
+  spawn(?MODULE, servlet, [ 0 ])
+
+servlet(Count) ->
+  receive 
+    prod -> ?MODULE:servlet(Count + 1)
+    print -> io:format("She's at ~p, Scotty!~n", [ Count ] ), ?MODULE:servlet(Count)
+    after 10000 -> ?MODULE:servlet(0)
 
 comm() ->
   io:format('I am ~p~n', [ self() ])

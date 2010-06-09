@@ -70,7 +70,7 @@ after :
   {token,{integer,TokenLine,list_to_integer(TokenChars)}}.
 {D}+\.{D}+((E|e)(\+|\-)?{D}+)? :
   {token,{float,TokenLine,list_to_float(TokenChars)}}.
-[a-z][0-9a-zA-Z_]* :
+[a-z][0-9a-zA-Z_]*(\.[0-9a-zA-Z_]+)* :
   {token,{atom,TokenLine,list_to_atom(TokenChars)}}.
 \?[A-Z][0-9a-zA-Z_]* :
   {token,{macro,TokenLine,TokenChars}}.
