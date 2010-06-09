@@ -79,7 +79,7 @@ after :
   %,J = element(1, lists:split(length(H) - 1, H))
   %,{token,{atom,TokenLine,list_to_atom(J)}}.
   {token,{atom,TokenLine,TokenChars}}.
-[A-Z][0-9a-zA-Z_]* :
+[A-Z_][0-9a-zA-Z_]* :
   {token,{variable,TokenLine,TokenChars}}.
 [\[\]\{\}\\+\-\*\/%\:\;\|\(\)!><=\.\,=] :
   [H|_]=TokenChars
