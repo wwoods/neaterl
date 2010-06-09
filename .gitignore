@@ -1,3 +1,5 @@
 *.beam
 *_lex.erl
 *_yec.erl
+examples/*.erl
+examples/*.beam

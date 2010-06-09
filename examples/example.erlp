@@ -1,4 +1,4 @@
--module(factorial)
+-module(example)
 -export([fac/1,test/1,anontest/0,comm/0,comm/1,yecc/0,servlet/0,servlet/1])
 
 %Treat ',' and '\n' as same concept (a separator).

@@ -20,9 +20,9 @@ branch_block branch_list branch_line branch
 func_def_body
 arg_list arg_parts
 guard_expression
-expression expression_atom uminus
+expression expression_atom uminus unot
 list tuple
-func_call func_call_name
+func_call 
 anon_fun anon_fun_clause_block anon_fun_clause_line anon_fun_clause_list anon_fun_clause
 .
 
@@ -42,6 +42,8 @@ Rootsymbol module.
 Left 5 ';'.
 Left 10 ','.
 Nonassoc 12 '->'.
+Left 13 'orelse'.
+Left 14 'andalso'.
 Left 15 '!'.
 Left 20 '='.
 Left 20 '=='.
@@ -56,6 +58,7 @@ Left 100 '-'.
 Left 200 '*'.
 Left 200 '/'.
 Unary 300 uminus.
+Unary 300 unot.
 
 module -> prep_module atom ')' line export line module_statement_list
   : { module, value_of('$2'), '$5', '$7' }.
@@ -101,6 +104,8 @@ expression -> list : '$1'.
 expression -> tuple : '$1'.
 expression -> expression_atom : '$1'.
 expression -> expression '!' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
+expression -> expression 'andalso' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
+expression -> expression 'orelse' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
 expression -> expression '>' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
 expression -> expression '<' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
 expression -> expression '>=' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
@@ -114,7 +119,9 @@ expression -> expression '/' expression : { binary_op, line_of('$1'), list_value
 expression -> expression '++' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
 expression -> expression '--' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
 expression -> uminus : '$1'.
+expression -> unot : '$1'.
 uminus -> '-' expression : { unary_op, line_of('$1'), "-", '$2' }.
+unot -> 'not' expression : { unary_op, line_of('$1'), "not ", '$2' }.
 
 expression_atom -> atom : constant_from('$1').
 expression_atom -> macro : { macro, line_of('$1'), list_value_of('$1'), nil }.

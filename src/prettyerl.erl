@@ -1,5 +1,7 @@
 -module(prettyerl).
--export([ test/0, compile/1, compile/2, file/1, file/2, string/2, string/3, convert/1 ]).
+-export([ compile/1, compile/2, file/1, file/2, string/2, string/3, convert/1 ]).
+
+-include_lib("eunit/include/eunit.hrl").
 
 %Walt Woods, 4 June 2010
 %Idea that erlang can be pretty... Python-inspired indented syntax.
@@ -102,20 +104,6 @@ reload(Module) ->
   ,code:purge(ModName)
   ,{module,ModName} = code:load_file(Module)
   ,ok
-  .
-
-test() ->
-  {ok,_} = leex:file(prettyerl_lex)
-  ,ok = reload(prettyerl_lex)
-  ,{ok,_} = yecc:file(prettyerl_yec)
-  ,ok=reload(prettyerl_yec)
-  ,{ok,B,_}=prettyerl_lex:string("-module(test)\n-export([hello_world/0,fac/1])\n\nhello_world() -> io:format(\"~p~n\", \"Hello, world!\")\n\nfac(0) -> 1\nfac(N) -> \n  N * fac(N-1)\n\nblah(N) when is_atom(N) -> whentop\nblah(N) -> is_integer(N), N>0")
-  ,{ok,C}=convert_indents(B)
-  ,io:format("Tokenized: ~p~n", [C])
-  ,{ok,P}=prettyerl_yec:parse(C)
-  ,io:format("Parsed: ~p~n", [P])
-  ,io:format("Final:~n~s~n", [ convert(P) ])
-  ,all_tests_passed
   .
   
 convert_indents(List) ->
@@ -312,4 +300,12 @@ list_insert(Out, Symbol, [H|T]) when element(1, H) == 'end'; element(1, H) == 'a
   ;
 list_insert(Out, Symbol, [H|T]) ->
   list_insert(Out ++ [ Symbol ] ++ [H], Symbol, T)
+  .
+
+%% Pretty Erl Tests
+
+compile_test() ->
+  {ok,J} = compile("examples/example")
+  ,6=J:fac(3)
+  %Lookup eunit docs for more...
   .
