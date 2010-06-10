@@ -13,7 +13,7 @@
 %TODO: Auto line-carry when next line starts with ',', '+', '-', '++', '--', '*', '/', '|'
 %TODO: Read and respond to blogs
 %TODO: Strip blank lines, unroll statements before convert()
-%TODO: Anonymous functions
+%TODO: Disallow going from an inline clause to an indented one
 
 %Read file from http://wiki.trapexit.erlang-consulting.com/Read_File_to_List
 readlines(FileName) ->
@@ -255,10 +255,10 @@ convert2({macro, Line, Name, Args}, Next) ->
   Name ++ convert_stmts(Args)
   ;
 convert2({binary_op, Line, Symbol, Left, Right}, Next) ->
-  "(" ++ convert_stmts(Left) ++ ")" ++ Symbol ++ "(" ++ convert_stmts(Right) ++ ")"
+  convert_stmts(Left) ++ Symbol ++ convert_stmts(Right)
   ;
 convert2({unary_op, Line, Symbol, Right}, Next) ->
-  Symbol ++ "(" ++ convert_stmts(Right) ++ ")"
+  Symbol ++ convert_stmts(Right)
   ;
 convert2({ list, Line, Args, Tail }, Next) ->
   TailPart = case Tail of
@@ -270,6 +270,9 @@ convert2({ list, Line, Args, Tail }, Next) ->
 convert2({ tuple, Line, Args }, Next) ->
   "{" ++ convert_stmts(", ", Args) ++ "}"
   ;
+convert2({ paren_expr, Line, Expr }, Next) ->
+  "(" ++ convert_stmts(Expr) ++ ")"
+  ;
 convert2(H, Next) ->
   io_lib:format("<Unknown ~p>", [ element(1, H) ])
   .
@@ -277,10 +280,11 @@ convert2(H, Next) ->
 function_def_match(
   {function_def, _, Name1, {function_body,_,{arg_list,_,Args1},_,_}}
   , {function_def, _, Name2, {function_body,_,{arg_list,_,Args2},_,_}}) ->
-  if 
-    Name1 == Name2, length(Args1) == length(Args2) ->
-      true
-    ;true -> false
+  case
+    Name1 == Name2 andalso list_length(Args1) == list_length(Args2) 
+  of
+    true -> true
+    ;_ -> false
     end
   ;
 function_def_match({function_def, _, Name1, {function_body,_,{arg_list,_,Args1},_,_}}, B) ->
@@ -304,6 +308,20 @@ list_insert(Out, Symbol, [H|T]) when element(1, H) == 'end'; element(1, H) == 'a
   ;
 list_insert(Out, Symbol, [H|T]) ->
   list_insert(Out ++ [ Symbol ] ++ [H], Symbol, T)
+  .
+  
+list_length(List) ->
+  list_length(0, List)
+  .
+  
+list_length(Out, []) ->
+  Out
+  ;
+list_length(Out, [H|T]) when element(1, H) == 'begin'; element(1, H) == 'end' ->
+  list_length(Out, T)
+  ;
+list_length(Out, [H|T]) ->
+  list_length(Out + 1, T)
   .
 
 %% Neat Erl Tests

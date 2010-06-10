@@ -9,13 +9,13 @@ Rules.
   skip_token.
 \%[^\n]* :
   skip_token.
-\n\- :
+\n\-[a-z] :
   %Beginning of preprocessor, make an indent record and
   %push back the dash
-  {token,{indent,TokenLine+1,""},"-----"}.
--module[\(] :
+  {token,{indent,TokenLine+1,""},"-----" ++ [ lists:last(TokenChars) ]}.
+-module :
   {token,{prep_module,TokenLine}}.
------export[\(] :
+-----export :
   {token,{prep_export,TokenLine}}.
 -----([^e]|e[^x]|ex[^p])[^\n]* :
   [_,_,_,_|A] = TokenChars

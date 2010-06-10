@@ -18,6 +18,75 @@ fac(N) when is_integer(N) andalso N > 0 ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 Then, open up an erlang prompt, run "neaterl:compile(test).",
-and the files test.erl and test.beam will be created, allowing
-normal usage of the test module.
+and the files test.erl and test.beam will be created and 
+processed, allowing normal usage of the test module.
+
+-COOL POINTS-
+In addition to removing most statement termination symbols, neaterl 
+changes the grammar such that line breaks and commas are relatively 
+interchangable.  All statements can either be inline (comma-separated) 
+or indented (line-separated).  For example, a long list could be 
+written in neaterl as:
+
+[ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ]
+
+OR
+
+[
+  1
+  2
+  3
+  4
+  5
+  6
+  7
+  8
+  9
+  10
   
+Note that there's no closing bracket on the indented version - the
+indentation (or lack thereof) of the following statement implies that 
+the previous structure is closed.  Though a little odd at first, it 
+really helps to remove a lot of the unnecessary punctuation.  Compare 
+with closing symbols:
+
+test() ->
+  D = lists:map(
+    fun(X) ->
+      [
+        {hi,there}
+        {yo,val}
+        {eep, street}
+      ]
+    lists:seq(1,1000000)
+  )
+  fprof:apply(
+    {lists,map}
+    [
+      fun(X) -> proplists:get_value(eep, X)
+      D
+    ]
+  )
+  
+To without closing symbols:
+
+test() ->
+  D = lists:map(
+    fun(X) -> 
+      [
+        {hi, there}
+        {yo, val}
+        {eep, street}
+    lists:seq(1,1000000)
+  fprof:apply(
+    {lists,map}
+    [ 
+      fun(X) -> proplists:get_value(eep, X)
+      D
+
+Omitting the closing symbols better subscribes to the idea that 
+indentation is what delineates one statement from another.  It remains
+easy on the eyes (mine at least) to see exactly where the next statement
+begins and the current statement ends.  And the overall result is more 
+vertically compacted, which reduces scrolling.
+

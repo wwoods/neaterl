@@ -17,11 +17,12 @@ module export export_list export_func
 module_statement_list module_statement
 statement_list statement_block statement_line statement
 branch_block branch_list branch_line branch
-func_def_body
-arg_list arg_parts
+func_def_body func_def_when
+arg_list arg_parts_inline arg_parts_list arg_parts_list2
 guard_expression
 expression expression_atom uminus unot
 list tuple
+list_arg_parts_list list_arg_parts_list2
 func_call 
 anon_fun anon_fun_clause_block anon_fun_clause_line anon_fun_clause_list anon_fun_clause
 .
@@ -60,12 +61,12 @@ Left 200 '/'.
 Unary 300 uminus.
 Unary 300 unot.
 
-module -> prep_module atom ')' line export line module_statement_list
-  : { module, value_of('$2'), '$5', '$7' }.
-export -> prep_export '[' ']' ')'
+module -> prep_module '(' atom ')' line export line module_statement_list
+  : { module, value_of('$3'), '$6', '$8' }.
+export -> prep_export '(' '[' ']' ')'
   : [].
-export -> prep_export '[' export_list ']' ')'
-  : '$3'.
+export -> prep_export '(' '[' export_list ']' ')'
+  : '$4'.
 export_list -> export_func : [ '$1' ].
 export_list -> export_func sep export_list
   : [ '$1' ] ++ '$3' .
@@ -130,7 +131,7 @@ expression_atom -> variable : constant_from('$1').
 expression_atom -> integer : constant_from('$1').
 expression_atom -> float : constant_from('$1').
 expression_atom -> string : constant_from('$1').
-expression_atom -> '(' expression ')' : '$2'.
+expression_atom -> '(' expression ')' : { paren_expr, line_of('$1'), '$2' }.
 
 branch_block -> 'begin' branch_list 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].
 branch_block -> branch_line : '$1'.
@@ -161,23 +162,52 @@ func_call -> expression_atom arg_list : { funccall, line_of('$1'), [ '$1' ], '$2
 func_call -> expression_atom ':' func_call : { funccall, line_of('$1'), [ '$1' ] ++ element(3, '$3'), element(4, '$3') }.
 
 arg_list -> '(' ')' : { arg_list, line_of('$1'), [] }.
-arg_list -> '(' arg_parts ')' : { arg_list, line_of('$1'), '$2' }.
-arg_parts -> expression : [ '$1' ].
-arg_parts -> expression sep arg_parts : [ '$1' ] ++ '$3'.
+arg_list -> '(' arg_parts_inline ')' : { arg_list, line_of('$1'), '$2' }.
+arg_list -> '(' arg_parts_list : { arg_list, line_of('$1'), '$2' }.
 
-func_def_body -> arg_list '->' statement_block : { function_body, nil, '$1', nil, '$3' }.
-func_def_body -> arg_list 'when' guard_expression '->' statement_block : { function_body, nil, '$1', '$3', '$5' }.
+arg_parts_inline -> expression : [ '$1' ].
+arg_parts_inline -> expression sep arg_parts_inline : [ '$1' ] ++ '$3'.
+
+arg_parts_list -> 'begin' arg_parts_list2 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].
+arg_parts_list2 -> expression : [ '$1' ].
+arg_parts_list2 -> expression line arg_parts_list2 : [ '$1' ] ++ '$3'.
+
+func_def_body -> arg_list func_def_when statement_block : { function_body, nil, '$1', '$2', '$3' }.
+func_def_body -> arg_list line func_def_when statement_block : { function_body, nil, '$1', '$3', '$4' }.
+
+func_def_when -> '->' : nil.
+func_def_when -> 'when' guard_expression '->' : '$2'.
+func_def_when -> 'when' guard_expression line '->' : '$2'.
 
 %seps is any statement separator (line breaks or ',')
 sep -> line : nil.
 sep -> ',' : nil.
 
 list -> '[' ']' : { list, line_of('$1'), [], nil }.
-list -> '[' arg_parts ']' : { list, line_of('$1'), '$2', nil }.
-list -> '[' arg_parts '|' variable ']' : { list, line_of('$1'), '$2', constant_from('$4') }.
+list -> '[' arg_parts_inline ']' : { list, line_of('$1'), '$2', nil }.
+list -> '[' arg_parts_inline '|' variable ']' : { list, line_of('$1'), '$2', constant_from('$4') }.
+list -> '[' list_arg_parts_list :
+  case '$2' of
+    {X,Y} -> { list, line_of('$1'), X, Y }
+    ;Z -> { list, line_of('$1'), Z, nil }
+  end
+  .
+
+list_arg_parts_list -> 'begin' list_arg_parts_list2 'end' 
+  : 
+    case lists:last('$2') of
+      { list_tail, X } -> { [ '$1' ] ++ lists:sublist('$2', length('$2') - 1) ++ [ '$3' ], X }
+      ;_ -> [ '$1' ] ++ '$2' ++ [ '$3' ]
+    end
+  .
+
+list_arg_parts_list2 -> expression : [ '$1' ].
+list_arg_parts_list2 -> expression line list_arg_parts_list2 : [ '$1' ] ++ '$3'.
+list_arg_parts_list2 -> '|' expression : [ { list_tail, '$2' } ].
 
 tuple -> '{' '}' : { tuple, [] }.
-tuple -> '{' arg_parts '}' : { tuple, line_of('$1'), '$2' }.
+tuple -> '{' arg_parts_inline '}' : { tuple, line_of('$1'), '$2' }.
+tuple -> '{' arg_parts_list : { tuple, line_of('$1'), '$2' }.
 
 Erlang code.
 constant_from({_,Line,Value}) ->
