@@ -1,0 +1,131 @@
+-module(neaterl.shell)
+-export([run/0, run/1, eval/1 ])
+
+-import(io)
+-import(io_lib)
+-import(lists)
+-import(erl_scan)
+-import(erl_parse)
+-import(erl_eval)
+-import(compile)
+-import(code)
+-import(neaterl)
+
+%Walt Woods, 10 June 2010
+
+run() ->
+  Eval = spawn_link(?MODULE, eval, [ erl_eval:new_bindings() ])
+  register(neaterl_eval, Eval)
+  run(Eval)
+  
+run(Eval) ->
+  Text = lists:flatten(read_lines([], 1))
+  case Text of 
+    "exit\n\n" -> ok
+    "quit\n\n" -> ok
+    "\n" -> ?MODULE:run(Eval)
+    "" -> ?MODULE:run(Eval)
+    _ -> 
+      run_text(Eval, Text)
+      ?MODULE:run(Eval)
+      
+run_text(Eval, T=[$-|_]) ->
+  %Module level code
+  case lists:prefix("-module", T) of
+    true ->
+      %Module definition
+      try display(neaterl:load_string(T))
+      catch
+        error of Reason -> io:format("Error: ~p~n", [ Reason ])
+    _ -> 
+      %Special shell code
+      display(not_implemented)
+run_text(Eval, T) ->
+  try
+    ErlCode = neaterl:string(T)
+    Eval ! { self(), code, ErlCode }
+    receive { result, Result } -> io:format("~p~n", [ Result ])
+  catch
+    error of Reason -> io:format("Error: ~p~n", [ Reason ])
+          
+display(Value) ->
+  io:format("~p~n", [ Value ])
+  
+read_lines(Out, Index) ->
+  Line = read_single_line(Index)
+  [First|_] = Line
+  if
+    Index == 1 andalso First == $- -> read_lines_module(Line, Index + 1, 0)
+    Line == "oops\n" -> read_lines(lists:sublist(Out, length(Out) - 1), Index - 1)
+    Line == "\n" -> Out ++ [ Line ]
+    true -> read_lines(Out ++ [ Line ], Index + 1)
+  
+read_lines_module(Out, Index, 2) ->
+  Out
+read_lines_module(Out, Index, SeqBlanks) ->
+  Line = read_single_line(Index)
+  if
+    Line == "oops\n" -> read_lines_module(
+      lists:sublist(Out, length(Out) - 1)
+      Index - 1
+      0
+    Line == "\n" -> read_lines_module(Out ++ [ Line ], Index + 1, SeqBlanks + 1)
+    true -> read_lines_module(Out ++ [ Line ], Index + 1, 0)
+    
+read_single_line(Index) ->
+  io:get_line(
+    lists:flatten(io_lib:format("N~p> ", [ Index ]))
+
+eval(Bindings) ->
+  receive
+    { Pid, code, ErlCode } ->
+      try
+        {ok,Tokens,_} = erl_scan:string(ErlCode)
+        {ok,Tree} = erl_parse:parse_exprs(Tokens)
+        {value, Result, NewBindings} = erl_eval:exprs(Tree, Bindings, {eval, fun shell_funs/3})
+        Pid ! { result, Result }
+        ?MODULE:eval(NewBindings)
+      catch
+        Type of Reason -> 
+          Pid ! { result, { Type, {Reason, erlang:get_stacktrace()} } }
+          ?MODULE:eval(Bindings)
+    Other ->
+      io:format("neaterl.shell:eval/1 received: ~p~n", [ Other ])
+      ?MODULE:eval(Bindings)
+      
+shell_funs(f, [], Bindings) ->
+  {value, ok, erl_eval:new_bindings()}
+shell_funs(f, Args, Bindings) ->
+  {
+    value
+    ok
+    lists:foldl(
+      fun({var,_,Name},NewBindings) -> erl_eval:del_binding(Name, NewBindings)
+      Bindings
+      Args
+shell_funs(Name, Args, Bindings) ->
+  NewArgs = lists:map(
+    fun(X) ->
+      {value,Result,Bindings} = erl_eval:expr(X, Bindings)
+      Result
+    Args
+  {value,shell_funs(Name, NewArgs),Bindings}
+
+shell_funs(c, [ File ]) ->
+  shell_funs(c, [ File, [ verbose, report ] ])
+shell_funs(c, [ File, Options ]) ->
+  try
+    neaterl:load_file(File, Options)
+  catch
+    error of Reason ->
+      if 
+        {badmatch,{error,enoent}} =/= Reason ->
+          Reason
+        true ->
+          {ok,Module,Binary} = compile:file(File, [binary] ++ Options)
+          code:purge(Module)
+          code:load_binary(Module, File, Binary)
+          
+shell_funs(m, [ Module ]) ->
+  [H|_] = Module:module_info()
+  element(2, H)

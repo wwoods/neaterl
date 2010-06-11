@@ -2,20 +2,74 @@ neaterl
 Erlang alternative syntax based on indentation rather than punctuation
 Software authored by Walt Woods, project start date 6 June 2010
 
--BASIC USAGE-
-The shell doesn't build automatically at the moment, to use it you'd 
-need to do:
+-INTERACTIVE SHELL-
+Make the neaterl module, make sure the binaries are in the erlang path
+(for instance, use "erl -pa ebin" if you're testing this out from the 
+module's directory), and type the following in a standard erlang 
+interpreter:
 
-neaterl:load_file("/path/to/neaterl/src/neaterl/shell").
-neaterl:shell().
+1> neaterl:shell().
+N1> 
 
-And then type away!  One blank line ends statement mode, two blanks ends
-module mode.  Yes, you can input modules in the shell.  Just be sure to
-start with the -module statement, followed by the -export statement.
+And the N1> prompt means you're now typing erlang code through neaterl!  
+Statements execute by entering a blank line after you've entered all the
+lines you want evaluated.  For example:
 
-Create a file with a .erln extension, such as test.erln.
+N1> 1 + 1
+N2> 
+2
+N1> [
+N2>   1
+N3>   2
+N4>   3
+N5> 
+[1,2,3]
+N1> 
 
-Copy the following into it:
+The prompt numbering might continue going up at some point.  However,
+at the moment its numbering is useful if you receive syntax errors, or
+for entering modules on the command line, like so:
+
+N1> -module(test)
+N2> -export(hi/0)
+N3> oops
+N2> -export([hi/0])
+N3> 
+N4> hi() -> 
+N5>   Name=io:get_line("Your Name? ")
+N6>   io:format("Hello, ~s!~n", [ Name ])
+N7> 
+N8> 
+{module,test}
+N1> test:hi()
+N2> 
+Your Name? Walt
+Hello, Walt
+!
+ok
+N1> 
+
+Two things to note:
+  1. Two blank lines terminate a module definition.
+  2. The "oops" command means, "I made a typo and don't want to retype
+     every line, please let me retype the last!"  It can be executed 
+     as many times as you'd like, all the way back to N1> 
+
+The two blank lines might change at some point, as modules entered in the 
+shell probably are not very long, and don't really need blank lines for
+formatting.
+
+Typing "exit" or "quit" will leave the neaterl shell.
+
+N1> quit
+N2> 
+(Back to regular erlang prompt)
+2> 
+
+-COMPILING .erln FILES-
+
+Create a file with a .erln extension, such as test.erln.  Copy the
+following into it:
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -module(test)
 -export([ hello_world/0, fac/1 ])
@@ -27,9 +81,23 @@ fac(N) when is_integer(N) andalso N > 0 ->
   N * fac(N - 1)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-Then, open up an erlang prompt, run "neaterl:compile(test).",
-and the files test.erl and test.beam will be created and 
-processed, allowing normal usage of the test module.
+Then, open up any erlang prompt, and run "neaterl:compile(test)" to
+generate the corresponding .beam file.  
+
+If you'd like to load the module immediately to play with it, similar 
+to the default shell's c() command, run "neaterl:load_file(test)"
+
+(Incomplete) If you want to have neaterl check the entries in your
+Emakefile for .erln source files, run "neaterl:make_all()" from a 
+script or some such.
+
+-GETTING EQUIVALENT ERLANG CODE-
+
+neaterl exposes four functions: file/1, file/2, string/1, and string/2, 
+that return the equivalent erlang code for the content of the file or
+string.
+
+Line numbers and indentation are preserved for the most part.
 
 -COOL POINTS-
 In addition to removing most statement termination symbols, neaterl 
@@ -95,8 +163,6 @@ test() ->
       D
 
 Omitting the closing symbols better subscribes to the idea that 
-indentation is what delineates one statement from another.  It remains
-easy on the eyes (mine at least) to see exactly where the next statement
-begins and the current statement ends.  And the overall result is more 
-vertically compacted, which reduces scrolling.
+indentation is what delineates one statement from another.  It also 
+produces more succinct code.
 

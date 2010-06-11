@@ -1,6 +1,10 @@
 %Neat / tidy erlang grammar
 
 %TODO - Capitalize Nonterminals.
+%TODO - Remove line after 'end', have _line remove the token line, not _list
+%TODO - Change catch syntax from "Type of Reason"
+%TODO - When clauses
+%TODO - Multiline comments / remainder / div
 
 %Differences
 %Commas and unescaped newlines are both separators
@@ -20,7 +24,7 @@ branch_block branch_list branch_line branch
 func_def_body func_def_when
 arg_list arg_parts_inline arg_parts_list arg_parts_list2
 guard_expression
-expression expression_atom uminus unot binary_op
+expression expression_atom uminus unot ucatch binary_op try_expr
 list tuple
 list_arg_parts_list list_arg_parts_list2
 func_call 
@@ -28,7 +32,7 @@ anon_fun anon_fun_clause_block anon_fun_clause_line anon_fun_clause_list anon_fu
 .
 
 Terminals 
-'(' ')' '@' '[' ']' '{' '}' '+' '-' '/' '*' '.' '>' '<' '|'
+'(' ')' '@' '[' ']' '{' '}' '+' '-' '/' '*' '.' '>' '<' '|' '#'
 '->' '++' '--' '!' ':' ';' '=' '==' '>=' '<='
 '/=' '=:=' '=/='
 line 'begin' 'end' ',' 'char_expr'
@@ -38,21 +42,24 @@ prep_module prep_export preproc
 'andalso' 'orelse' 'not' 'and' 'or' 'xor'
 'fun'
 'receive' 'after'
+'try' 'catch'
 .
 
 Rootsymbol module.
 
+% Intentionally reordered
 Left 5 ';'.
 Left 10 ','.
 Nonassoc 12 '->'.
-Left 13 'orelse'.
-Left 14 'andalso'.
-Left 15 '!'.
-Left 20 '='.
+Right 15 '!'.
+Right 20 '='.
+Left 30 'orelse'.
+Left 31 'andalso'.
 Left 40 'and'.
 Left 40 'or'.
 Left 40 'xor'.
 Unary 50 unot.
+Unary 50 ucatch.
 Left 60 '=='.
 Left 60 '=:='.
 Left 60 '/='.
@@ -61,13 +68,16 @@ Left 60 '>'.
 Left 60 '<'.
 Left 60 '>='.
 Left 60 '<='.
-Left 80 '++'.
-Left 80 '--'.
+Right 80 '++'.
+Right 80 '--'.
 Left 100 '+'.
 Left 100 '-'.
 Left 200 '*'.
 Left 200 '/'.
-Unary 300 uminus.
+%'rem' and 'div' at some point - integer remainding and division.  Maybe under % and / though.
+Unary 800 uminus.
+Left 900 '#'.
+Left 1000 ':'.
 
 module -> prep_module '(' atom ')' line export line module_statement_list
   : { module, value_of('$3'), '$6', '$8' }.
@@ -112,6 +122,7 @@ guard_expression -> guard_expression ';' guard_expression : { binary_op, line_of
 expression -> 'case' expression 'of' branch_block : { 'case', line_of('$1'), '$2', '$4' }.
 expression -> 'if' branch_block : { 'if', line_of('$1'), '$2' }.
 expression -> 'receive' branch_block : { 'receive', line_of('$1'), '$2' }.
+expression -> try_expr : '$1'.
 expression -> func_call : '$1'.
 expression -> anon_fun : '$1'.
 expression -> list : '$1'.
@@ -120,8 +131,10 @@ expression -> expression_atom : '$1'.
 expression -> expression binary_op expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
 expression -> uminus : '$1'.
 expression -> unot : '$1'.
+expression -> ucatch : '$1'.
 uminus -> '-' expression : { unary_op, line_of('$1'), "-", '$2' }.
 unot -> 'not' expression : { unary_op, line_of('$1'), "not ", '$2' }.
+ucatch -> 'catch' expression : { unary_op, line_of('$1'), "catch ", '$2' }.
 
 %It's probably an LALR(1) restriction that there can't be an optional 
 %line before the operator, but I'd like to be able to insert one.
@@ -168,8 +181,10 @@ branch_line -> branch branch_line : [ '$1' ] ++ '$2'.
 
 branch -> guard_expression '->' statement_block : { branch, line_of('$1'), '$1', '$3' }.
 branch -> 'after' expression '->' statement_block : { 'after', line_of('$1'), '$2', '$4' }.
+branch -> expression 'of' expression '->' statement_block : { branch, line_of('$1'), { binary_op, line_of('$1'), ":", '$1', '$3' }, '$5' }.
 
 anon_fun -> 'fun' anon_fun_clause_block : { 'fun', line_of('$1'), '$2' }.
+anon_fun -> 'fun' export_func : { 'fun_export', line_of('$1'), '$2' }.
 
 anon_fun_clause_block -> anon_fun_clause_line : '$1'.
 anon_fun_clause_block -> 'begin' anon_fun_clause_list 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].
@@ -181,6 +196,13 @@ anon_fun_clause_list -> anon_fun_clause : [ '$1' ].
 anon_fun_clause_list -> anon_fun_clause line anon_fun_clause_list : [ '$1' ] ++ '$3'.
 
 anon_fun_clause -> func_def_body : '$1'.
+
+try_expr -> 'try' statement_block 'catch' branch_block : { 'try', line_of('$1'), '$2', '$4', nil }.
+try_expr -> 'try' statement_block 'catch' branch_block 'after' statement_block : { 'try', line_of('$1'), '$2', '$4', '$6' }.
+try_expr -> 'try' statement_block line 'catch' branch_block : { 'try', line_of('$1'), '$2', '$5', nil }.
+try_expr -> 'try' statement_block line 'catch' branch_block 'after' statement_block : { 'try', line_of('$1'), '$2', '$5', '$7' }.
+% Excluding try..of unless I hear a good reason it's meaningful.
+% I could see scoping arguments, maybe.  But they don't appear to be affected.
 
 func_call -> expression_atom arg_list : { funccall, line_of('$1'), [ '$1' ], '$2' }.
 func_call -> expression_atom ':' func_call : { funccall, line_of('$1'), [ '$1' ] ++ element(3, '$3'), element(4, '$3') }.

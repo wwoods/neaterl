@@ -1,5 +1,5 @@
 -module(neaterl).
--export([ shell/0, compile/1, compile/2, file/1, file/2, string/1, string/2, load_file/1, load_file/2, load_string/1, load_string/2 ]).
+-export([ shell/0, compile/1, compile/2, file/1, file/2, string/1, string/2, load_file/1, load_file/2, load_string/1, load_string/2, make_all/0 ]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -9,20 +9,49 @@
 %No more 'end' keyword at all (though it can be used, it isn't parsed)
 %No more ',' for "Then do this" (Unless two statements are on the same line)
 %No more ';' for "else"
+
 %TODO: Pipe char '|' - Pipes output of A to B
 %TODO: Auto line-carry when next line starts with ',', '+', '-', '++', '--', '*', '/', '|'
 %TODO: Read and respond to blogs
 %TODO: Strip blank lines, unroll statements before convert()
-%TODO: Disallow going from an inline clause to an indented one
+%TODO: Maybe: Disallow going from an inline clause to an indented one
+
+-define(COMPILE_DEFAULTS, [ verbose, report ]).
+-define(COMPILE_TEMP, "temp_neaterl.erl").
 
 shell() ->
   neaterl.shell:run()
+  .
+  
+make_all() ->
+  List = load_makefile()
+  ,make_all(List)
+  .
+  
+make_all([]) -> 
+  ok
+  ;
+make_all([{Pattern, Options}|T]) ->
+  Files = filelib:wildcard(Pattern)
+  ,ErlnFiles = lists:filter(fun(X) -> lists:suffix(".erln", X) end, Files)
+  ,lists:map(fun(X) -> io:format("Recompile: ~s~n", [X]), compile(X, Options ++ [ report ]) end
+    , lists:map(fun(X) -> lists:sublist(X, length(X) - length(".erln")) end, ErlnFiles)
+    )
+  ,make_all(T)
+  .
+  
+load_makefile() ->
+  [ {"src/*", [ debug_info, {outdir, "ebin"}, {i, "include"}, debug_neaterl ] } ]
   .
 
 %Read file from http://wiki.trapexit.erlang-consulting.com/Read_File_to_List
 readlines(FileName) ->
   {ok, Device} = file:open(FileName, [read])
-  ,get_all_lines(Device, "")
+  ,try
+    get_all_lines(Device, "")
+  after
+    file:close(Device)
+  end
   .
   
 get_all_lines(Device, Accum) ->
@@ -34,24 +63,47 @@ get_all_lines(Device, Accum) ->
   
 writefile(File, Text) ->
   {ok, IODevice} = file:open(File, [write])
-  ,file:write(IODevice, Text)
-  ,file:close(IODevice)
-  ,{ok,File}
+  ,try
+    file:write(IODevice, Text)
+    ,file:close(IODevice)
+    ,{ok,File}
+  after
+    file:close(IODevice)
+  end
   .
   
 compile(File) ->
-  compile(File, [])
+  compile(File, ?COMPILE_DEFAULTS)
   .
   
 compile(File, Options) when is_atom(File) ->
   compile(atom_to_list(File), Options)
   ;
 compile(File, Options) ->
-  not_implemented
+  ErlCode=file(File, Options)
+  ,OutDir = proplists:get_value(outdir, Options, ".")
+  ,case compile_erl(ErlCode, [ binary ] ++ Options) of
+    {ok,Module,Binary} -> 
+      {Path,Last} = compile_get_path(Module)
+      ,filelib:ensure_dir(OutDir ++ Path)
+      ,writefile(OutDir ++ Path ++ Last ++ ".beam", Binary)
+      ,{ok,Module}
+    ;Other -> Other
+  end
+  .
+  
+compile_get_path(Module) when is_atom(Module) ->
+  compile_get_path(atom_to_list(Module))
+  ;
+compile_get_path(Module) ->
+  Parts = lists:map(fun(X) -> binary_to_list(X) end, re:split(Module, "\\."))
+  ,Last = lists:last(Parts)
+  ,Parts2 = lists:sublist(Parts, length(Parts) - 1)
+  ,{"/" ++ string:join(Parts2, "/") ++ "/", Last}
   .
 
 file(File) ->
-  file(File, [])
+  file(File, ?COMPILE_DEFAULTS)
   .
   
 file(Name, Options) when is_atom(Name) ->
@@ -64,18 +116,20 @@ file(Name, Options) ->
   .
   
 string(String) ->
-  string(String, [])
+  string(String, ?COMPILE_DEFAULTS)
   .
   
 string(String, Options) ->
   {ok,B,_}=neaterl_lex:string(String)
   ,{ok,L}=convert_indents(B)
+  ,proplists:is_defined(debug_neaterl, Options) andalso io:format("Tokens: ~p~n", [ L ])
   ,{ok,Y}=neaterl_yec:parse(L)
+  ,proplists:is_defined(debug_neaterl, Options) andalso io:format("Parsed as: ~p~n", [ Y ])
   ,convert(Y)
   .
   
 load_file(File) ->
-  load_code(file(File), [])
+  load_code(file(File), ?COMPILE_DEFAULTS)
   .
   
 load_file(File, Options) ->
@@ -83,22 +137,22 @@ load_file(File, Options) ->
   .
   
 load_string(String) ->
-  load_code(string(String), [])
+  load_code(string(String), ?COMPILE_DEFAULTS)
   .
   
 load_string(String, Options) ->
   load_code(string(String, Options), Options)
   .
   
-get_binary(ErlCode, Options) ->
-  try 
-    F="temp.erl"
-    ,{ok,Device} = file:open(F, [ write ])
-    ,io:fwrite(Device, "~s", [ ErlCode ])
-    ,file:close(Device)
-    ,N={ok,Module,Binary} = compile:file(F, [ binary ])
+compile_erl(ErlCode, Options) ->
+  F=?COMPILE_TEMP
+  ,try
+    writefile(F, ErlCode)
+    ,N = compile:file(F, Options)
   catch
     error:Reason -> {error,Reason}
+  after
+    file:delete(F)
   end
   %{ok,Tokens,_} = erl_scan:string(ErlCode)
   %,{ok,Forms} = parse_forms(Tokens)
@@ -107,7 +161,7 @@ get_binary(ErlCode, Options) ->
   .
   
 load_code(ErlCode, Options) ->
-  {ok,Module,Binary} = get_binary(ErlCode, Options)
+  {ok,Module,Binary} = compile_erl(ErlCode, [ binary ] ++ Options)
   ,code:purge(Module)
   ,{module,Module} = code:load_binary(Module, "script", Binary)
   .
@@ -206,7 +260,7 @@ convert({module, Name, Exports, Stmts}) ->
   ;
 convert(List) when is_list(List) ->
   %expressions
-  Out = convert_stmts(".", List) ++ "."
+  Out = convert_stmts(",", List) ++ "."
   ,convert_output("", 1, "", Out)
   .
   
@@ -289,6 +343,16 @@ convert2({'after', Line, Expr, Stmts}, Next) ->
   ;
 convert2({'fun', Line, Clauses}, Next) ->
   "fun " ++ convert_stmts("; ", Clauses) ++ " end"
+  ;
+convert2({'fun_export', Line, Export}, Next) ->
+  "fun " ++ convert_stmts(Export)
+  ;
+convert2({'try', Line, Stmts, Catches, After}, Next) ->
+  AfterPart = case After of
+    nil -> ""
+    ;_ -> " after " ++ convert_stmts(", ", After)
+  end
+  ,"try " ++ convert_stmts(", ", Stmts) ++ " catch " ++ convert_stmts("; ", Catches) ++ AfterPart ++ " end"
   ;
 convert2({macro, Line, Name, nil}, Next) ->
   Name
