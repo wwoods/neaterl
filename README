@@ -3,6 +3,16 @@ Erlang alternative syntax based on indentation rather than punctuation
 Software authored by Walt Woods, project start date 6 June 2010
 
 -BASIC USAGE-
+The shell doesn't build automatically at the moment, to use it you'd 
+need to do:
+
+neaterl:load_file("/path/to/neaterl/src/neaterl/shell").
+neaterl:shell().
+
+And then type away!  One blank line ends statement mode, two blanks ends
+module mode.  Yes, you can input modules in the shell.  Just be sure to
+start with the -module statement, followed by the -export statement.
+
 Create a file with a .erln extension, such as test.erln.
 
 Copy the following into it:
