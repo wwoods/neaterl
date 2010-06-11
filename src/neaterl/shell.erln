@@ -1,0 +1,112 @@
+-module(neaterl.shell)
+-export([run/0, run/1, eval/1 ])
+
+-import(io)
+-import(io_lib)
+-import(lists)
+-import(erl_scan)
+-import(erl_parse)
+-import(erl_eval)
+-import(compile)
+-import(code)
+-import(neaterl)
+
+%Walt Woods, 10 June 2010
+%TODO - Lookup exception handling in Erlang...
+
+run() ->
+  Eval = spawn_link(?MODULE, eval, [ erl_eval:new_bindings() ])
+  run(Eval)
+  
+run(Eval) ->
+  Text = lists:flatten(read_lines([], 1))
+  case Text of 
+    "exit\n\n" -> ok
+    "quit\n\n" -> ok
+    "" -> ?MODULE:run(Eval)
+    _ -> 
+      run_text(Eval, Text)
+      ?MODULE:run(Eval)
+      
+run_text(Eval, T=[$-|_]) ->
+  %Module level code
+  case lists:prefix("-module", T) of
+    true ->
+      %Module definition
+      display(load_script(T))
+    _ -> 
+      %Special shell code
+      display(not_implemented)
+run_text(Eval, T) ->
+  ErlCode = neaterl:string(T)
+  Eval ! { self(), code, ErlCode }
+  receive Result -> io:format("~p~n", [ Result ])
+          
+display(Value) ->
+  io:format("~p~n", [ Value ])
+  
+read_lines(Out, Index) ->
+  Line = read_single_line(Index)
+  [First|_] = Line
+  if
+    Index == 1 andalso First == $- -> read_lines_module(Line, Index + 1, 0)
+    Line == "oops\n" -> read_lines(lists:sublist(Out, length(Out) - 1), Index - 1)
+    Line == "\n" -> Out ++ [ Line ]
+    true -> read_lines(Out ++ [ Line ], Index + 1)
+  
+read_lines_module(Out, Index, 2) ->
+  Out
+read_lines_module(Out, Index, SeqBlanks) ->
+  Line = read_single_line(Index)
+  if
+    Line == "oops\n" -> read_lines_module(
+      lists:sublist(Out, length(Out) - 1)
+      Index - 1
+      0
+    Line == "\n" -> read_lines_module(Out ++ [ Line ], Index + 1, SeqBlanks + 1)
+    true -> read_lines_module(Out ++ [ Line ], Index + 1, 0)
+    
+read_single_line(Index) ->
+  io:get_line(
+    lists:flatten(io_lib:format("N~p> ", [ Index ]))
+
+load_script(Text) ->
+  ErlCode = neaterl:string(Text)
+  io:format("Code: ~p~n", [ ErlCode ])
+  {ok,Tokens,_} = erl_scan:string(ErlCode) 
+  io:format("Tokens: ~p~n", [ Tokens ])
+  {ok,Forms} = parse_script(Tokens)
+  io:format("Forms: ~p~n", [ Forms ])
+  {ok,Module,Binary} = compile:forms(Forms)
+  {module,Module} = code:load_binary(Module, "script", Binary)
+  
+parse_script(List) -> 
+  FormGroups = split_script([], [], List)
+  io:format("Split Forms: ~p~n", [ FormGroups ])
+  parse_script([], FormGroups)
+  
+parse_script(Out, [H|T]) ->
+  {ok,Form} = erl_parse:parse_form(H)
+  parse_script(Out ++ [ Form ], T)
+parse_script(Out, []) ->
+  {ok, Out}
+  
+split_script(Out, Temp, [H={dot,Line}|T]) ->
+  split_script(Out ++ [ Temp ++ [H] ], [], T)
+split_script(Out, Temp, [H|T]) ->
+  split_script(Out, Temp ++ [H], T)
+split_script(Out, Temp, []) -> Out %Always a dot before nothing.
+
+eval(Bindings) ->
+  receive
+    { Pid, code, ErlCode } ->
+      %Thanks to http://www.erlang.org/pipermail/erlang-questions/2003-November/010544.html
+      %for showing me how to go about eval in erlang..
+      {ok,Tokens,_} = erl_scan:string(ErlCode)
+      {ok,[Tree]} = erl_parse:parse_exprs(Tokens)
+      {value, Result, NewBindings} = erl_eval:expr(Tree, Bindings)
+      Pid ! Result
+      ?MODULE:eval(NewBindings)
+    Other ->
+      io:format("neaterl.shell:eval/1 received: ~p~n", [ Other ])
+      ?MODULE:eval(Bindings)

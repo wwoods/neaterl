@@ -29,6 +29,12 @@ Rules.
   {token,{'->',TokenLine,TokenChars}}.
 == :
   {token,{'==',TokenLine,TokenChars}}.
+/= :
+  {token,{'/=',TokenLine,TokenChars}}.
+=\:= :
+  {token,{'=:=',TokenLine,TokenChars}}.
+=/= :
+  {token,{'=/=',TokenLine,TokenChars}}.
 >= :
   {token,{'>=',TokenLine,TokenChars}}.
 <= :
@@ -37,22 +43,34 @@ Rules.
   {token,{'++',TokenLine,TokenChars}}.
 \-\- :
   {token,{'--',TokenLine,TokenChars}}.
+\$[^\\] :
+  {token,{'char_expr',TokenLine,TokenChars}}.
+\$\\\\ :
+  {token,{'char_expr',TokenLine,TokenChars}}.
+\$\\x{\d+} :
+  {token,{'char_expr',TokenLine,TokenChars}}.
 case :
   {token,{'case',TokenLine}}.
 of :
   {token,{'of',TokenLine}}.
 if :
-  {token,{'if',TokenLine}}.
+  {token,{'if',TokenLine,TokenChars}}.
 when :
-  {token,{'when',TokenLine}}.
+  {token,{'when',TokenLine,TokenChars}}.
 orelse :
-  {token,{'orelse',TokenLine}}.
+  {token,{'orelse',TokenLine,TokenChars}}.
 andalso :
-  {token,{'andalso',TokenLine}}.
+  {token,{'andalso',TokenLine,TokenChars}}.
 fun :
   {token,{'fun',TokenLine}}.
+and :
+  {token,{'and',TokenLine,TokenChars}}.
+or :
+  {token,{'or',TokenLine,TokenChars}}.
+xor :
+  {token,{'xor',TokenLine,TokenChars}}.
 not :
-  {token,{'not',TokenLine}}.
+  {token,{'not',TokenLine,TokenChars}}.
 end :
   skip_token.
 when :

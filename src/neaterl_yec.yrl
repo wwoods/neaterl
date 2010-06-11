@@ -20,7 +20,7 @@ branch_block branch_list branch_line branch
 func_def_body func_def_when
 arg_list arg_parts_inline arg_parts_list arg_parts_list2
 guard_expression
-expression expression_atom uminus unot
+expression expression_atom uminus unot binary_op
 list tuple
 list_arg_parts_list list_arg_parts_list2
 func_call 
@@ -30,11 +30,13 @@ anon_fun anon_fun_clause_block anon_fun_clause_line anon_fun_clause_list anon_fu
 Terminals 
 '(' ')' '@' '[' ']' '{' '}' '+' '-' '/' '*' '.' '>' '<' '|'
 '->' '++' '--' '!' ':' ';' '=' '==' '>=' '<='
-line 'begin' 'end' ','
+'/=' '=:=' '=/='
+line 'begin' 'end' ',' 'char_expr'
 atom float integer variable string macro
 prep_module prep_export preproc
 'case' 'of' 'if' 'when'
-'andalso' 'orelse' 'fun' 'not'
+'andalso' 'orelse' 'not' 'and' 'or' 'xor'
+'fun'
 'receive' 'after'
 .
 
@@ -47,22 +49,33 @@ Left 13 'orelse'.
 Left 14 'andalso'.
 Left 15 '!'.
 Left 20 '='.
-Left 20 '=='.
-Left 20 '>'.
-Left 20 '<'.
-Left 20 '>='.
-Left 20 '<='.
-Left 50 '++'.
-Left 50 '--'.
+Left 40 'and'.
+Left 40 'or'.
+Left 40 'xor'.
+Unary 50 unot.
+Left 60 '=='.
+Left 60 '=:='.
+Left 60 '/='.
+Left 60 '=/='.
+Left 60 '>'.
+Left 60 '<'.
+Left 60 '>='.
+Left 60 '<='.
+Left 80 '++'.
+Left 80 '--'.
 Left 100 '+'.
 Left 100 '-'.
 Left 200 '*'.
 Left 200 '/'.
 Unary 300 uminus.
-Unary 300 unot.
 
 module -> prep_module '(' atom ')' line export line module_statement_list
   : { module, value_of('$3'), '$6', '$8' }.
+  
+%This is a hack... if the first line is not a module declaration, parse a
+%statement list instead
+module -> statement_list : '$1'.
+  
 export -> prep_export '(' '[' ']' ')'
   : [].
 export -> prep_export '(' '[' export_list ']' ')'
@@ -104,25 +117,35 @@ expression -> anon_fun : '$1'.
 expression -> list : '$1'.
 expression -> tuple : '$1'.
 expression -> expression_atom : '$1'.
-expression -> expression '!' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
-expression -> expression 'andalso' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
-expression -> expression 'orelse' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
-expression -> expression '>' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
-expression -> expression '<' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
-expression -> expression '>=' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
-expression -> expression '<=' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
-expression -> expression '==' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
-expression -> expression '=' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
-expression -> expression '+' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
-expression -> expression '-' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
-expression -> expression '*' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
-expression -> expression '/' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
-expression -> expression '++' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
-expression -> expression '--' expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
+expression -> expression binary_op expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
 expression -> uminus : '$1'.
 expression -> unot : '$1'.
 uminus -> '-' expression : { unary_op, line_of('$1'), "-", '$2' }.
 unot -> 'not' expression : { unary_op, line_of('$1'), "not ", '$2' }.
+
+%It's probably an LALR(1) restriction that there can't be an optional 
+%line before the operator, but I'd like to be able to insert one.
+binary_op -> '!' : '$1'.
+binary_op -> 'andalso' : '$1'.
+binary_op -> 'orelse' : '$1'.
+binary_op -> 'and' : '$1'.
+binary_op -> 'or' : '$1'.
+binary_op -> 'xor' : '$1'.
+binary_op -> '>' : '$1'.
+binary_op -> '<' : '$1'.
+binary_op -> '>=' : '$1'.
+binary_op -> '<=' : '$1'.
+binary_op -> '==' : '$1'.
+binary_op -> '/=' : '$1'.
+binary_op -> '=:=' : '$1'.
+binary_op -> '=/=' : '$1'.
+binary_op -> '=' : '$1'.
+binary_op -> '+' : '$1'.
+binary_op -> '-' : '$1'.
+binary_op -> '*' : '$1'.
+binary_op -> '/' : '$1'.
+binary_op -> '++' : '$1'.
+binary_op -> '--' : '$1'.
 
 expression_atom -> atom : constant_from('$1').
 expression_atom -> macro : { macro, line_of('$1'), list_value_of('$1'), nil }.
@@ -131,6 +154,7 @@ expression_atom -> variable : constant_from('$1').
 expression_atom -> integer : constant_from('$1').
 expression_atom -> float : constant_from('$1').
 expression_atom -> string : constant_from('$1').
+expression_atom -> 'char_expr' : constant_from('$1').
 expression_atom -> '(' expression ')' : { paren_expr, line_of('$1'), '$2' }.
 
 branch_block -> 'begin' branch_list 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].

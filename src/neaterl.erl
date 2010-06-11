@@ -1,5 +1,5 @@
 -module(neaterl).
--export([ compile/1, compile/2, file/1, file/2, string/2, string/3, convert/1 ]).
+-export([ shell/0, compile/1, compile/2, file/1, file/2, string/1, string/2, load_file/1, load_file/2, load_string/1, load_string/2 ]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -14,6 +14,10 @@
 %TODO: Read and respond to blogs
 %TODO: Strip blank lines, unroll statements before convert()
 %TODO: Disallow going from an inline clause to an indented one
+
+shell() ->
+  neaterl.shell:run()
+  .
 
 %Read file from http://wiki.trapexit.erlang-consulting.com/Read_File_to_List
 readlines(FileName) ->
@@ -35,68 +39,101 @@ writefile(File, Text) ->
   ,{ok,File}
   .
   
-compile(File) when is_atom(File) ->
-  compile(atom_to_list(File))
-  ;
 compile(File) ->
-  {ok,Module} = file(File)
-  ,case compile:file(Module) of
-    {ok,ModName} ->
-      code:purge(ModName)
-      ,code:load_file(ModName)
-      ,{ok,ModName}
-    ;error -> error
-  end
+  compile(File, [])
   .
   
-compile(File,debug) when is_atom(File) ->
-  compile(atom_to_list(File),debug)
+compile(File, Options) when is_atom(File) ->
+  compile(atom_to_list(File), Options)
   ;
-compile(File,debug) ->
-  {ok,Module} = file(File,debug)
-  ,case compile:file(Module) of
-    {ok,ModName} ->
-      code:purge(ModName)
-      ,code:load_file(ModName)
-      ,{ok,ModName}
-    ;error -> error
-  end
+compile(File, Options) ->
+  not_implemented
   .
 
-file(Atom) when is_atom(Atom) ->
-  file(atom_to_list(Atom))
+file(File) ->
+  file(File, [])
+  .
+  
+file(Name, Options) when is_atom(Name) ->
+  file(atom_to_list(Name), Options)
   ;
-file(Name) ->
+file(Name, Options) ->
   In = Name ++ ".erln"
-  ,Out = Name ++ ".erl"
   ,Text = lists:flatten(readlines(In))
-  ,string(Text, Out)
+  ,string(Text, Options)
   .
   
-file(Name, debug) ->
-  In = Name ++ ".erln"
-  ,Out = Name ++ ".erl"
-  ,Text = lists:flatten(readlines(In))
-  ,string(Text, Out, debug)
+string(String) ->
+  string(String, [])
   .
   
-string(String, Outfile) ->
+string(String, Options) ->
   {ok,B,_}=neaterl_lex:string(String)
   ,{ok,L}=convert_indents(B)
   ,{ok,Y}=neaterl_yec:parse(L)
-  ,C=convert(Y)
-  ,writefile(Outfile, C)
+  ,convert(Y)
   .
   
-string(String, Outfile, debug) ->
-  {ok,B,_}=neaterl_lex:string(String)
-  ,{ok,L}=convert_indents(B)
-  ,io:format("Lexed: ~p~n", [L])
-  ,{ok,Y}=neaterl_yec:parse(L)
-  ,io:format("Parsed: ~p~n", [Y])
-  ,C=convert(Y)
-  ,io:format("Output:~n~s~n", [C])
-  ,writefile(Outfile, C)
+load_file(File) ->
+  load_code(file(File), [])
+  .
+  
+load_file(File, Options) ->
+  load_code(file(File, Options), Options)
+  .
+  
+load_string(String) ->
+  load_code(string(String), [])
+  .
+  
+load_string(String, Options) ->
+  load_code(string(String, Options), Options)
+  .
+  
+get_binary(ErlCode, Options) ->
+  try 
+    F="temp.erl"
+    ,{ok,Device} = file:open(F, [ write ])
+    ,io:fwrite(Device, "~s", [ ErlCode ])
+    ,file:close(Device)
+    ,N={ok,Module,Binary} = compile:file(F, [ binary ])
+  catch
+    error:Reason -> {error,Reason}
+  end
+  %{ok,Tokens,_} = erl_scan:string(ErlCode)
+  %,{ok,Forms} = parse_forms(Tokens)
+  %,io:format("PARSER! ~p~n", [ Forms ])
+  %,{ok,Module,Binary} = compile:forms(Forms)
+  .
+  
+load_code(ErlCode, Options) ->
+  {ok,Module,Binary} = get_binary(ErlCode, Options)
+  ,code:purge(Module)
+  ,{module,Module} = code:load_binary(Module, "script", Binary)
+  .
+  
+parse_forms(List) -> 
+  FormGroups = split_script([], [], List)
+  ,parse_forms([], FormGroups)
+  .
+  
+parse_forms(Out, [H|T]) ->
+  io:format("Form: ~p~n", [H]),
+  {ok,Form} = erl_parse:parse_form(H)
+  ,parse_forms(Out ++ [ Form ], T)
+  ;
+parse_forms(Out, []) ->
+  {ok, Out}
+  .
+  
+split_script(Out, Temp, [H={dot,Line}|T]) ->
+  split_script(Out ++ [ Temp ++ [H] ], [], T)
+  ;
+split_script(Out, Temp, [H|T]) ->
+  split_script(Out, Temp ++ [H], T)
+  ;
+split_script(Out, Temp, []) -> 
+  Out %Always will be a dot before the end.
   .
 
 reload(Module) ->
@@ -165,6 +202,11 @@ convert({module, Name, Exports, Stmts}) ->
     , { line, 3 }
     , convert("", Stmts)
     ])
+  ,convert_output("", 1, "", Out)
+  ;
+convert(List) when is_list(List) ->
+  %expressions
+  Out = convert_stmts(".", List) ++ "."
   ,convert_output("", 1, "", Out)
   .
   
@@ -255,7 +297,7 @@ convert2({macro, Line, Name, Args}, Next) ->
   Name ++ convert_stmts(Args)
   ;
 convert2({binary_op, Line, Symbol, Left, Right}, Next) ->
-  convert_stmts(Left) ++ Symbol ++ convert_stmts(Right)
+  convert_stmts(Left) ++ " " ++ Symbol ++ " " ++ convert_stmts(Right)
   ;
 convert2({unary_op, Line, Symbol, Right}, Next) ->
   Symbol ++ convert_stmts(Right)
@@ -292,12 +334,16 @@ function_def_match({function_def, _, Name1, {function_body,_,{arg_list,_,Args1},
   .
   
 list_insert(Symbol, [H|List]) when element(1, H) == 'begin' ->
-  [_|Result] = list_insert([], Symbol, List)
-  ,[H] ++ Result
+  [H] ++ list_insert(Symbol, List)
   ;
 list_insert(Symbol, List) ->
-  [_|Result] = list_insert([], Symbol, List)
-  ,Result
+  case List of
+    [H|_] when element(1, H) == 'end'; element(1, H) == 'after' ->
+      list_insert([], Symbol, List)
+    ;_ ->
+      [_|Result] = list_insert([], Symbol, List)
+      ,Result
+  end
   .
   
 list_insert(Out, Symbol, []) ->
@@ -327,7 +373,7 @@ list_length(Out, [H|T]) ->
 %% Neat Erl Tests
 
 compile_test() ->
-  {ok,J} = compile("examples/example")
+  {module,J} = load_file("examples/example")
   ,6=J:fac(3)
   %Lookup eunit docs for more...
   .
