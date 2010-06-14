@@ -1,6 +1,7 @@
 #!/bin/sh
 #Thank you http://code.google.com/p/plists for being a good skeleton package
 #for a code library.
+mkdir ebin
 erl -eval "leex:file(\"src/neaterl_lex\")" -run init stop -noshell
 erl -eval "yecc:file(\"src/neaterl_yec\")" -run init stop -noshell
 erl -run make all -run init stop -noshell
