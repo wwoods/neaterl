@@ -5,7 +5,7 @@
 %Allow [,\n] at front of list terms
 
 fac(0) -> 1
-fac(N) when is_integer(N), N>0 ->
+fac(N) when is_integer(N) and N>0 ->
   N * fac(N-1)
 
 -define(MOD(), 36)

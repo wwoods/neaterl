@@ -3,8 +3,6 @@
 %TODO - Change catch syntax from "Type of Reason"
 %TODO - Capitalize Nonterminals.
 %TODO - Multiline comments / remainder / div
-%TODO - Solve the ';' vs 'or' vs 'orelse' conundrum...  maybe just use 'or' and context replace with ';' in guards and 'orelse' otherwise
-%TODO - Solve the ',' vs 'and' vs 'andalso' conundrum...  maybe just use 'and' and context replace with ';' in guards and 'orelse' otherwise
 
 %Differences
 %Commas and unescaped newlines are both separators
@@ -47,7 +45,8 @@ prep_module prep_export prep_import prep_author prep_define
 
 Rootsymbol module.
 
-% Intentionally reordered
+% Intentionally reordered.. though not entirely effective at the moment, 
+% since it compiles down to erlang :)
 Left 5 ';'.
 Left 10 ','.
 Nonassoc 12 '->'.
@@ -119,9 +118,7 @@ statement_line -> statement : stmts_to_list('$1').
 statement -> expression : '$1'.
 statement -> try_expr : '$1'.
 
-guard_expression -> expression : '$1'.
-guard_expression -> guard_expression ',' guard_expression : { binary_op, line_of('$1'), ",", '$1', '$3' }.
-guard_expression -> guard_expression ';' guard_expression : { binary_op, line_of('$1'), ";", '$1', '$3' }.
+guard_expression -> expression : { guard_expr, line_of('$1'), '$1' }.
 
 %Remember, some statements are actually expressions...
 expression -> 'case' expression 'of' branch_block : { 'case', line_of('$1'), '$2', '$4' }.
@@ -143,8 +140,6 @@ ucatch -> 'catch' expression : { unary_op, line_of('$1'), "catch ", '$2' }.
 %It's probably an LALR(1) restriction that there can't be an optional 
 %line before the operator, but I'd like to be able to insert one.
 binary_op -> '!' : '$1'.
-binary_op -> 'andalso' : '$1'.
-binary_op -> 'orelse' : '$1'.
 binary_op -> 'and' : '$1'.
 binary_op -> 'or' : '$1'.
 binary_op -> 'xor' : '$1'.
@@ -265,7 +260,7 @@ arg_parts_list -> 'begin' arg_parts_list2 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].
 arg_parts_list2 -> expression : [ '$1' ].
 arg_parts_list2 -> expression line arg_parts_list2 : [ '$1' ] ++ '$3'.
 
-func_def_body -> arg_list when_clause statement_block : { function_body, nil, '$1', '$2', '$3' }.
+func_def_body -> arg_list when_clause statement_block : { function_body, line_of('$1'), '$1', '$2', '$3' }.
 
 when_clause -> '->' : { 'when', line_of('$1'), nil }.
 when_clause -> 'when' guard_expression '->' : { 'when', line_of('$1'), '$2' }.

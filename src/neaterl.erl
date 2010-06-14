@@ -80,7 +80,7 @@ compile(File, Options) when is_atom(File) ->
   compile(atom_to_list(File), Options)
   ;
 compile(File, Options) ->
-  ErlCode=file(File, Options)
+  {ok,ErlCode}=file(File, Options)
   ,OutDir = proplists:get_value(outdir, Options, ".")
   ,case compile_erl(ErlCode, [ binary ] ++ Options) of
     {ok,Module,Binary} -> 
@@ -125,23 +125,25 @@ string(String, Options) ->
   ,proplists:is_defined(debug_neaterl, Options) andalso io:format("Tokens: ~p~n", [ L ])
   ,{ok,Y}=neaterl_yec:parse(L)
   ,proplists:is_defined(debug_neaterl, Options) andalso io:format("Parsed as: ~p~n", [ Y ])
-  ,convert(Y)
+  ,{ok,convert(Y)}
   .
   
 load_file(File) ->
-  load_code(file(File), ?COMPILE_DEFAULTS)
+  load_file(File, ?COMPILE_DEFAULTS)
   .
   
 load_file(File, Options) ->
-  load_code(file(File, Options), Options)
+  {ok,ErlCode} = file(File, Options)
+  ,load_code(ErlCode, Options)
   .
   
 load_string(String) ->
-  load_code(string(String), ?COMPILE_DEFAULTS)
+  load_string(String, ?COMPILE_DEFAULTS)
   .
   
 load_string(String, Options) ->
-  load_code(string(String, Options), Options)
+  {ok,ErlCode} = string(String, Options)
+  ,load_code(ErlCode, Options)
   .
   
 compile_erl(ErlCode, Options) ->
@@ -150,14 +152,10 @@ compile_erl(ErlCode, Options) ->
     writefile(F, ErlCode)
     ,N = compile:file(F, Options)
   catch
-    error:Reason -> {error,Reason}
+    error:Reason -> {error,{Reason,erlang:get_stacktrace()}}
   after
-    file:delete(F)
+    proplists:is_defined(keep_temp, Options) orelse file:delete(F)
   end
-  %{ok,Tokens,_} = erl_scan:string(ErlCode)
-  %,{ok,Forms} = parse_forms(Tokens)
-  %,io:format("PARSER! ~p~n", [ Forms ])
-  %,{ok,Module,Binary} = compile:forms(Forms)
   .
   
 load_code(ErlCode, Options) ->
@@ -252,148 +250,169 @@ convert({module, Name, Stmts}) ->
   Out=lists:flatten([ 
     io_lib:format("-module(~s).", [Name])
     ,{ line, 2 }
-    , convert("", Stmts)
+    , convert("", Stmts, [])
     ])
   ,convert_output("", 1, "", Out)
   ;
 convert(List) when is_list(List) ->
   %expressions
-  Out = convert_stmts(",", List) ++ "."
+  Out = convert_stmts(",", List, []) ++ "."
   ,convert_output("", 1, "", Out)
   .
   
-convert_stmts(Stmts) ->
-  convert_stmts("", Stmts)
+convert_stmts(Stmts, State) ->
+  convert_stmts("", Stmts, State)
   .
 
-convert_stmts(Delimit, []) ->
+convert_stmts(Delimit, [], State) ->
   ""
   ;
-convert_stmts(Delimit, Stmts) when not is_list(Stmts) ->
-  convert("", [ Stmts ])
+convert_stmts(Delimit, Stmts, State) when not is_list(Stmts) ->
+  convert("", [ Stmts ], State)
   ;
-convert_stmts(Delimit, Stmts) when is_list(Delimit) ->
-  convert_stmts({constant, nil, Delimit}, Stmts)
+convert_stmts(Delimit, Stmts, State) when is_list(Delimit) ->
+  convert_stmts({constant, nil, Delimit}, Stmts, State)
   ;
-convert_stmts(Delimit, Stmts) ->
-  convert("", list_insert(Delimit, Stmts))
+convert_stmts(Delimit, Stmts, State) ->
+  convert("", list_insert(Delimit, Stmts), State)
   .
 
-convert(Out, []) ->
+convert(Out, [], State) ->
   Out
   ;
-convert(Out, [H|T]) when element(1, H) == 'begin'; element(1, H) == 'end' ->
-  convert(Out ++ convert2(H, nil), T)
+convert(Out, [H|T], State) when element(1, H) == 'begin'; element(1, H) == 'end' ->
+  convert(Out ++ convert2(H, nil, State), T, State)
   ;
-convert(Out, [H,Peek|T]) ->
-  convert(Out ++ [ { line, element(2, H) } ] ++ convert2(H, Peek), [ Peek ] ++ T)
+convert(Out, [H,Peek|T], State) ->
+  convert(Out ++ [ { line, element(2, H) } ] ++ convert2(H, Peek, State), [ Peek ] ++ T, State)
   ;
-convert(Out, [H|T]) ->
-  convert(Out ++ [ { line, element(2, H) } ] ++ convert2(H, nil), T)
+convert(Out, [H|T], State) ->
+  convert(Out ++ [ { line, element(2, H) } ] ++ convert2(H, nil, State), T, State)
   .
 
-convert2({export_stmt,_Line,Exports}, Next) ->
-  "-export([" ++ convert_stmts(",", Exports) ++ "])."
+convert2({export_stmt,_Line,Exports}, Next, State) ->
+  "-export([" ++ convert_stmts(",", Exports, State) ++ "])."
   ;
-convert2({export,_Line,Func,ArgCount}, Next) ->
+convert2({export,_Line,Func,ArgCount}, Next, State) ->
   io_lib:format("~s/~p", [ Func, ArgCount ])
   ;
-convert2({pre_author,_Line,Author}, Next) ->
-  "-author(" ++ convert_stmts(Author) ++ ")."
+convert2({pre_author,_Line,Author}, Next, State) ->
+  "-author(" ++ convert_stmts(Author, State) ++ ")."
   ;
-convert2({pre_define,_Line,Term,Expr}, Next) ->
-  "-define(" ++ convert_stmts(Term) ++ "," ++ convert_stmts(Expr) ++ ")."
+convert2({pre_define,_Line,Term,Expr}, Next, State) ->
+  "-define(" ++ convert_stmts(Term, State) ++ "," ++ convert_stmts(Expr, State) ++ ")."
   ;
-convert2({'begin',Line,Indent}, Next) ->
+convert2({'begin',Line,Indent}, Next, State) ->
   [ { indent, Indent}, { line, Line } ]
   ;
-convert2({'end',Line,Indent}, Next) ->
+convert2({'end',Line,Indent}, Next, State) ->
   [ { indent, Indent} ]
   ;
-convert2({constant,_Line,String}, Next) ->
+convert2({constant,_Line,String}, Next, State) ->
   String
   ;
-convert2({function_def,_Line,Name,Body}, Next) ->
+convert2({function_def,_Line,Name,Body}, Next, State) ->
   Term = case function_def_match({function_def,_Line,Name,Body}, Next) of
     true -> ";"
     ;false -> "."
     end
-  ,Name ++ convert_stmts(Body) ++ Term
+  ,Name ++ convert_stmts(Body, State) ++ Term
   ;
-convert2({function_body, _, Args, When, Body}, Next) ->
-  WhenPart = convert_stmts(When)
-  ,convert_stmts(Args) ++ WhenPart ++ convert_stmts(",", Body)
+convert2({function_body, _, Args, When, Body}, Next, State) ->
+  WhenPart = convert_stmts(When, State)
+  ,convert_stmts(Args, State) ++ WhenPart ++ convert_stmts(",", Body, State)
   ;
-convert2({'when', _Line, Guard}, Next) ->
+convert2({'when', _Line, Guard}, Next, State) ->
   if
     Guard == nil -> " -> "
-    ;true -> " when " ++ convert_stmts(Guard) ++ " -> "
+    ;true -> " when " ++ convert_stmts(Guard, State) ++ " -> "
   end
   ;
-convert2({arg_list, _, Args}, Next) ->
-  "(" ++ convert_stmts(", ", Args) ++ ")"
+convert2({arg_list, _, Args}, Next, State) ->
+  "(" ++ convert_stmts(", ", Args, State) ++ ")"
   ;
-convert2({funccall, Line, Names, Args}, Next) ->
-  convert_stmts(":", Names) ++ convert_stmts(Args)
+convert2({funccall, Line, Names, Args}, Next, State) ->
+  convert_stmts(":", Names, State) ++ convert_stmts(Args, State)
   ;
-convert2({'case', Line, Expr, Branches}, Next) ->
-  "case " ++ convert_stmts(Expr) ++ " of " ++ convert_stmts("; ", Branches) ++ " end"
+convert2({'case', Line, Expr, Branches}, Next, State) ->
+  "case " ++ convert_stmts(Expr, State) ++ " of " ++ convert_stmts("; ", Branches, State) ++ " end"
   ;
-convert2({'if', Line, Branches}, Next) ->
-  "if " ++ convert_stmts("; ", Branches) ++ " end"
+convert2({'if', Line, Branches}, Next, State) ->
+  "if " ++ convert_stmts("; ", Branches, State) ++ " end"
   ;
-convert2({'receive', Line, Branches}, Next) ->
-  "receive " ++ convert_stmts("; ", Branches) ++ " end"
+convert2({'receive', Line, Branches}, Next, State) ->
+  "receive " ++ convert_stmts("; ", Branches, State) ++ " end"
   ;
-convert2({branch, _Line, Expr, When, Stmts}, Next) ->
-  convert_stmts(Expr) ++ convert_stmts(When) ++ convert_stmts(", ", Stmts)
+convert2({branch, _Line, Expr, When, Stmts}, Next, State) ->
+  convert_stmts(Expr, State) ++ convert_stmts(When, State) ++ convert_stmts(", ", Stmts, State)
   ;
-convert2({'after', Line, Expr, Stmts}, Next) ->
-  "after " ++ convert_stmts(Expr) ++ " -> " ++ convert_stmts(", ", Stmts)
+convert2({'after', Line, Expr, Stmts}, Next, State) ->
+  "after " ++ convert_stmts(Expr, State) ++ " -> " ++ convert_stmts(", ", Stmts, State)
   ;
-convert2({'fun', Line, Clauses}, Next) ->
-  "fun " ++ convert_stmts("; ", Clauses) ++ " end"
+convert2({'fun', Line, Clauses}, Next, State) ->
+  "fun " ++ convert_stmts("; ", Clauses, State) ++ " end"
   ;
-convert2({'fun_export', Line, Export}, Next) ->
-  "fun " ++ convert_stmts(Export)
+convert2({'fun_export', Line, Export}, Next, State) ->
+  "fun " ++ convert_stmts(Export, State)
   ;
-convert2({'try', Line, Stmts, Catches, After}, Next) ->
+convert2({'try', Line, Stmts, Catches, After}, Next, State) ->
   CatchPart = case Catches of
     nil -> ""
-    ;_ -> " catch " ++ convert_stmts("; ", Catches)
+    ;_ -> " catch " ++ convert_stmts("; ", Catches, State)
   end
   ,AfterPart = case After of
     nil -> ""
-    ;_ -> " after " ++ convert_stmts(", ", After)
+    ;_ -> " after " ++ convert_stmts(", ", After, State)
   end
-  ,"try " ++ convert_stmts(", ", Stmts) ++ CatchPart ++ AfterPart ++ " end"
+  ,"try " ++ convert_stmts(", ", Stmts, State) ++ CatchPart ++ AfterPart ++ " end"
   ;
-convert2({macro, Line, Name, nil}, Next) ->
+convert2({macro, Line, Name, nil}, Next, State) ->
   Name
   ;
-convert2({macro, Line, Name, Args}, Next) ->
-  Name ++ convert_stmts(Args)
+convert2({macro, Line, Name, Args}, Next, State) ->
+  Name ++ convert_stmts(Args, State)
   ;
-convert2({binary_op, Line, Symbol, Left, Right}, Next) ->
-  convert_stmts(Left) ++ " " ++ Symbol ++ " " ++ convert_stmts(Right)
+convert2({guard_expr, _Line, Expr}, Next, State) ->
+  convert_stmts(Expr, [ guard_andor ] ++ State)
   ;
-convert2({unary_op, Line, Symbol, Right}, Next) ->
-  Symbol ++ convert_stmts(Right)
+convert2({binary_op, _Line, "and", Left, Right}, Next, State) ->
+  case proplists:is_defined(guard_andor, State) of
+    true ->
+      Without = proplists:delete(guard_andor, State)
+      ,convert_stmts(Left, Without) ++ "," ++ convert_stmts(Right, Without)
+    ;_ ->
+      convert_stmts(Left, State) ++ " andalso " ++ convert_stmts(Right, State)
+  end
   ;
-convert2({ list, Line, Args, Tail }, Next) ->
+convert2({binary_op, _Line, "or", Left, Right}, Next, State) ->
+  case proplists:is_defined(guard_andor, State) of
+    true ->
+      Without = proplists:delete(guard_andor, State)
+      ,convert_stmts(Left, Without) ++ ";" ++ convert_stmts(Right, Without)
+    ;_ ->
+      convert_stmts(Left, State) ++ " orelse " ++ convert_stmts(Right, State)
+  end
+  ;
+convert2({binary_op, Line, Symbol, Left, Right}, Next, State) ->
+  convert_stmts(Left, State) ++ " " ++ Symbol ++ " " ++ convert_stmts(Right, State)
+  ;
+convert2({unary_op, Line, Symbol, Right}, Next, State) ->
+  Symbol ++ convert_stmts(Right, State)
+  ;
+convert2({ list, Line, Args, Tail }, Next, State) ->
   TailPart = case Tail of
     nil -> ""
-    ;V -> "|" ++ convert_stmts(Tail)
+    ;V -> "|" ++ convert_stmts(Tail, State)
     end
-  ,"[" ++ convert_stmts(", ", Args) ++ TailPart ++ "]"
+  ,"[" ++ convert_stmts(", ", Args, State) ++ TailPart ++ "]"
   ;
-convert2({ tuple, Line, Args }, Next) ->
-  "{" ++ convert_stmts(", ", Args) ++ "}"
+convert2({ tuple, Line, Args }, Next, State) ->
+  "{" ++ convert_stmts(", ", Args, State) ++ "}"
   ;
-convert2({ paren_expr, Line, Expr }, Next) ->
-  "(" ++ convert_stmts(Expr) ++ ")"
+convert2({ paren_expr, Line, Expr }, Next, State) ->
+  "(" ++ convert_stmts(Expr, State) ++ ")"
   ;
-convert2(H, Next) ->
+convert2(H, Next, State) ->
   io_lib:format("<Unknown ~p>", [ element(1, H) ])
   .
   
@@ -451,7 +470,7 @@ list_length(Out, [H|T]) ->
 %% Neat Erl Tests
 
 compile_test() ->
-  {module,J} = load_file("examples/example")
+  {module,J} = load_file("examples/example", [debug_info,verbose,report])
   ,6=J:fac(3)
   %Lookup eunit docs for more...
   .

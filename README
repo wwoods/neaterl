@@ -166,3 +166,10 @@ Omitting the closing symbols better subscribes to the idea that
 indentation is what delineates one statement from another.  It also 
 produces more succinct code.
 
+--and/or/andalso/orelse/,/;--
+andalso, orelse, ',', and ';' have all been merged into 'and' and 'or'.
+The compiler will choose the appropriate symbol based on if the operator
+occurs in a guard expression or not.  To see how these symbols translate,
+use the "keep_temp" option in neaterl's compilation.  Note that, at 
+present, there is no non-shortcircuiting version of these operators.
+

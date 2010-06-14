@@ -55,7 +55,7 @@ read_lines(Out, Index) ->
   Line = read_single_line(Index)
   [First|_] = Line
   if
-    Index == 1 andalso First == $- -> read_lines_module(Line, Index + 1, 0)
+    Index == 1 and First == $- -> read_lines_module(Line, Index + 1, 0)
     Line == "oops\n" -> read_lines(lists:sublist(Out, length(Out) - 1), Index - 1)
     Line == "\n" -> Out ++ [ Line ]
     true -> read_lines(Out ++ [ Line ], Index + 1)
