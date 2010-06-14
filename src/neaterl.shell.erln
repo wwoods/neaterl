@@ -74,7 +74,7 @@ read_lines_module(Out, Index, SeqBlanks) ->
     
 read_single_line(Index) ->
   io:get_line(
-    lists:flatten(io_lib:format("N~p> ", [ Index ]))
+    lists:flatten(io_lib:format("N~2.B> ", [ Index ]))
 
 eval(Bindings) ->
   receive

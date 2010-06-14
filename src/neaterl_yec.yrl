@@ -1,10 +1,10 @@
 %Neat / tidy erlang grammar
 
-%TODO - Capitalize Nonterminals.
-%TODO - Remove line after 'end', have _line remove the token line, not _list
 %TODO - Change catch syntax from "Type of Reason"
-%TODO - When clauses
+%TODO - Capitalize Nonterminals.
 %TODO - Multiline comments / remainder / div
+%TODO - Solve the ';' vs 'or' vs 'orelse' conundrum...  maybe just use 'or' and context replace with ';' in guards and 'orelse' otherwise
+%TODO - Solve the ',' vs 'and' vs 'andalso' conundrum...  maybe just use 'and' and context replace with ';' in guards and 'orelse' otherwise
 
 %Differences
 %Commas and unescaped newlines are both separators
@@ -21,7 +21,7 @@ module export export_list export_func
 module_statement_list module_statement
 statement_list statement_block statement_line statement
 branch_block branch_list branch_line branch
-func_def_body func_def_when
+func_def_body when_clause
 arg_list arg_parts_inline arg_parts_list arg_parts_list2
 guard_expression
 expression expression_atom uminus unot ucatch binary_op try_expr
@@ -37,7 +37,7 @@ Terminals
 '/=' '=:=' '=/='
 line 'begin' 'end' ',' 'char_expr'
 atom float integer variable string macro
-prep_module prep_export preproc
+prep_module prep_export prep_import prep_author prep_define
 'case' 'of' 'if' 'when'
 'andalso' 'orelse' 'not' 'and' 'or' 'xor'
 'fun'
@@ -79,17 +79,17 @@ Unary 800 uminus.
 Left 900 '#'.
 Left 1000 ':'.
 
-module -> prep_module '(' atom ')' line export line module_statement_list
-  : { module, value_of('$3'), '$6', '$8' }.
+module -> prep_module '(' atom ')' line module_statement_list
+  : { module, value_of('$3'), '$6' }.
   
 %This is a hack... if the first line is not a module declaration, parse a
 %statement list instead
 module -> statement_list : '$1'.
   
 export -> prep_export '(' '[' ']' ')'
-  : [].
+  : { export_stmt, line_of('$1'), [] }.
 export -> prep_export '(' '[' export_list ']' ')'
-  : '$4'.
+  : { export_stmt, line_of('$1'), '$4' }.
 export_list -> export_func : [ '$1' ].
 export_list -> export_func sep export_list
   : [ '$1' ] ++ '$3' .
@@ -100,19 +100,24 @@ module_statement_list -> module_statement line module_statement_list : stmts_to_
 module_statement_list -> line : [].
 
 module_statement -> atom func_def_body : { function_def, line_of('$1'), list_value_of('$1'), '$2' }.
-module_statement -> preproc : { constant, line_of('$1'), list_value_of('$1') ++ "." }.
+module_statement -> export : '$1'.
+module_statement -> prep_import '(' atom ')' : { constant, line_of('$1'), "-import(" ++ list_value_of('$3') ++ ")." }.
+module_statement -> prep_author '(' expression ')' : { pre_author, line_of('$1'), '$3' }.
+module_statement -> prep_define '(' expression ',' statement ')' : { pre_define, line_of('$1'), '$3', '$5' }.
+module_statement -> prep_define '(' 'begin' expression line statement 'end' : { pre_define, line_of('$1'), '$4', '$6' }.
 
-statement_block -> statement_line : '$1'.
+statement_block -> statement : '$1'.
 statement_block -> 'begin' statement_list 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].
 
-statement_list -> statement_block : '$1'.
-statement_list -> statement_block line statement_list : '$1' ++ '$3'.
+statement_list -> statement : [ '$1' ].
+statement_list -> statement line statement_list : [ '$1' ] ++ '$3'.
 
 statement_line -> statement : stmts_to_list('$1').
-statement_line -> statement ',' statement_line : stmts_to_list('$1') ++ '$3'.
-statement_line -> statement ';' : stmts_to_list('$1').
+%statement_line -> statement ',' statement_line : stmts_to_list('$1') ++ '$3'.
+%statement_line -> statement ';' : stmts_to_list('$1').
 
 statement -> expression : '$1'.
+statement -> try_expr : '$1'.
 
 guard_expression -> expression : '$1'.
 guard_expression -> guard_expression ',' guard_expression : { binary_op, line_of('$1'), ",", '$1', '$3' }.
@@ -122,7 +127,6 @@ guard_expression -> guard_expression ';' guard_expression : { binary_op, line_of
 expression -> 'case' expression 'of' branch_block : { 'case', line_of('$1'), '$2', '$4' }.
 expression -> 'if' branch_block : { 'if', line_of('$1'), '$2' }.
 expression -> 'receive' branch_block : { 'receive', line_of('$1'), '$2' }.
-expression -> try_expr : '$1'.
 expression -> func_call : '$1'.
 expression -> anon_fun : '$1'.
 expression -> list : '$1'.
@@ -179,9 +183,9 @@ branch_list -> branch line branch_list : [ '$1' ] ++ '$3'.
 branch_line -> branch : [ '$1' ].
 branch_line -> branch branch_line : [ '$1' ] ++ '$2'.
 
-branch -> guard_expression '->' statement_block : { branch, line_of('$1'), '$1', '$3' }.
+branch -> expression when_clause statement_block : { branch, line_of('$1'), '$1', '$2', '$3' }.
 branch -> 'after' expression '->' statement_block : { 'after', line_of('$1'), '$2', '$4' }.
-branch -> expression 'of' expression '->' statement_block : { branch, line_of('$1'), { binary_op, line_of('$1'), ":", '$1', '$3' }, '$5' }.
+branch -> expression 'of' expression when_clause statement_block : { branch, line_of('$1'), { binary_op, line_of('$1'), ":", '$1', '$3' }, '$4', '$5' }.
 
 anon_fun -> 'fun' anon_fun_clause_block : { 'fun', line_of('$1'), '$2' }.
 anon_fun -> 'fun' export_func : { 'fun_export', line_of('$1'), '$2' }.
@@ -190,19 +194,62 @@ anon_fun_clause_block -> anon_fun_clause_line : '$1'.
 anon_fun_clause_block -> 'begin' anon_fun_clause_list 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].
 
 anon_fun_clause_line -> anon_fun_clause : [ '$1' ].
-anon_fun_clause_line -> anon_fun_clause anon_fun_clause_line : [ '$1' ] ++ '$2'.
+anon_fun_clause_line -> anon_fun_clause ',' anon_fun_clause_line : [ '$1' ] ++ '$3'.
 
 anon_fun_clause_list -> anon_fun_clause : [ '$1' ].
 anon_fun_clause_list -> anon_fun_clause line anon_fun_clause_list : [ '$1' ] ++ '$3'.
 
 anon_fun_clause -> func_def_body : '$1'.
 
-try_expr -> 'try' statement_block 'catch' branch_block : { 'try', line_of('$1'), '$2', '$4', nil }.
-try_expr -> 'try' statement_block 'catch' branch_block 'after' statement_block : { 'try', line_of('$1'), '$2', '$4', '$6' }.
+%try_expr is a statement because it uses multiple lines...Consider using it as an expression
+%in a parameter:
+%myfunc(
+%  parm1
+%  try parm2
+%  catch c
+%  parm3
+%For this, the catch() expression should be used instead.
 try_expr -> 'try' statement_block line 'catch' branch_block : { 'try', line_of('$1'), '$2', '$5', nil }.
-try_expr -> 'try' statement_block line 'catch' branch_block 'after' statement_block : { 'try', line_of('$1'), '$2', '$5', '$7' }.
+try_expr -> 'try' statement_block line 'catch' branch_block line 'after' statement_block : { 'try', line_of('$1'), '$2', '$5', '$8' }.
+try_expr -> 'try' statement_block line 'after' statement_block : { 'try', line_of('$1'), '$2', nil, '$5' }.
 % Excluding try..of unless I hear a good reason it's meaningful.
 % I could see scoping arguments, maybe.  But they don't appear to be affected.
+
+%WHY this is a statement - it has two lines.
+%Consider:
+%try hello
+%catch
+%  blah:blah -> blah
+
+%try hello catch
+%  blah:blah -> blah
+
+%try
+%  hello
+%catch
+%  blah:blah -> blah
+
+%How that works in params??
+%my_func(
+%  try hello
+%  catch goodbye
+%  parm2
+%  parm3
+%ewww...
+
+%my_func(
+%  try hello
+%    catch goodbye
+%  parm2
+%  parm3
+
+%my_func(
+%  try
+%    a
+%    b
+%    c
+%    catch
+%      123
 
 func_call -> expression_atom arg_list : { funccall, line_of('$1'), [ '$1' ], '$2' }.
 func_call -> expression_atom ':' func_call : { funccall, line_of('$1'), [ '$1' ] ++ element(3, '$3'), element(4, '$3') }.
@@ -218,12 +265,11 @@ arg_parts_list -> 'begin' arg_parts_list2 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].
 arg_parts_list2 -> expression : [ '$1' ].
 arg_parts_list2 -> expression line arg_parts_list2 : [ '$1' ] ++ '$3'.
 
-func_def_body -> arg_list func_def_when statement_block : { function_body, nil, '$1', '$2', '$3' }.
-func_def_body -> arg_list line func_def_when statement_block : { function_body, nil, '$1', '$3', '$4' }.
+func_def_body -> arg_list when_clause statement_block : { function_body, nil, '$1', '$2', '$3' }.
 
-func_def_when -> '->' : nil.
-func_def_when -> 'when' guard_expression '->' : '$2'.
-func_def_when -> 'when' guard_expression line '->' : '$2'.
+when_clause -> '->' : { 'when', line_of('$1'), nil }.
+when_clause -> 'when' guard_expression '->' : { 'when', line_of('$1'), '$2' }.
+when_clause -> line 'when' guard_expression line '->' : { 'when', line_of('$2'), '$3' }.
 
 %seps is any statement separator (line breaks or ',')
 sep -> line : nil.

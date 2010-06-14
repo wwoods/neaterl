@@ -9,22 +9,21 @@ Rules.
   skip_token.
 \%[^\n]* :
   skip_token.
-\n\-[a-z] :
-  %Beginning of preprocessor, make an indent record and
-  %push back the dash
-  {token,{indent,TokenLine+1,""},"-----" ++ [ lists:last(TokenChars) ]}.
--module :
-  {token,{prep_module,TokenLine}}.
------export :
-  {token,{prep_export,TokenLine}}.
------([^e]|e[^x]|ex[^p])[^\n]* :
-  [_,_,_,_|A] = TokenChars
-  ,{token,{preproc,TokenLine,A}}.
 \n\s* :
   [_|A] = TokenChars
   ,{token,{indent,TokenLine+1,A}}. %+1 Since the line is counted before the \n
 \s+ :
   skip_token.
+-module :
+  {token,{prep_module,TokenLine}}.
+-author :
+  {token,{prep_author,TokenLine}}.
+-export :
+  {token,{prep_export,TokenLine}}.
+-import :
+  {token,{prep_import,TokenLine}}.
+-define :
+  {token,{prep_define,TokenLine}}.
 -> :
   {token,{'->',TokenLine,TokenChars}}.
 == :

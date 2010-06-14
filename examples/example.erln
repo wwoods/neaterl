@@ -25,10 +25,13 @@ test(N) ->
     
 anontest() ->
   J=fun
-    (hi,there) -> yo, there, you
+    (hi,there) -> 
+      yo
+      there
+      you
     ({what}, 3) -> yup
   io:format("J: ~s~n", [ J(hi,there) ])
-  (fun (hi,there) -> yo; ({what}, 3) -> a, b, c)({what}, 3)
+  (fun (hi,there) -> yo, ({what}, 3) -> a)({what}, 3)
   
 servlet() ->
   spawn(?MODULE, servlet, [ 0 ])
@@ -36,7 +39,9 @@ servlet() ->
 servlet(Count) ->
   receive 
     prod -> ?MODULE:servlet(Count + 1)
-    print -> io:format("She's at ~p, Scotty!~n", [ Count ] ), ?MODULE:servlet(Count)
+    print -> 
+      io:format("She's at ~p, Scotty!~n", [ Count ] )
+      ?MODULE:servlet(Count)
     after 10000 -> ?MODULE:servlet(0)
 
 comm() ->

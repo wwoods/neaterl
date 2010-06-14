@@ -205,16 +205,18 @@ convert_indents(List) ->
 convert_indents(Out, [Cur,Next|Indents], []) ->
   convert_indents(Out ++ [{'end', element(2, lists:last(Out)), ""}], [Next] ++ Indents, [])
   ;
-convert_indents(Out, [Single|_], []) ->
+convert_indents(Out, [_Single|_], []) ->
   Out
   ;
 convert_indents(Out, Indents, [{indent,Line,New},{indent,NextLine,NextText}|T]) ->
   convert_indents(Out, Indents, [{indent,NextLine,NextText}] ++ T)
   ;
+convert_indents(Out, Indents, [{indent,_,_}]) ->
+  convert_indents(Out, Indents, [])
+  ;
 convert_indents(Out, [Cur|Indents], [{indent,Line,New}|T]) ->
   if
     length(New) > length(Cur) -> convert_indents(Out ++ [{'begin',Line,New}], [New] ++ [Cur] ++ Indents, T)
-    ;length(T) == 0, length(New) == length(Cur) -> convert_indents(Out, [Cur] ++ Indents, T)
     ;length(New) == length(Cur) -> convert_indents(Out ++ [{line,Line}], [Cur] ++ Indents, T)
     ;true -> convert_indents(Out ++ [{'end',Line,New}], Indents, [{indent,Line,New}] ++ T)
   end
@@ -246,14 +248,10 @@ convert_output(Out, Line, Indent, [H|T]) when is_integer(H) ->
   convert_output(Out ++ [ H ], Line, Indent, T)
   .
 
-convert({module, Name, Exports, Stmts}) ->
+convert({module, Name, Stmts}) ->
   Out=lists:flatten([ 
     io_lib:format("-module(~s).", [Name])
     ,{ line, 2 }
-    ,"-export(["
-    , convert_stmts(",", Exports)
-    , io_lib:format("]).", [])
-    , { line, 3 }
     , convert("", Stmts)
     ])
   ,convert_output("", 1, "", Out)
@@ -293,9 +291,18 @@ convert(Out, [H,Peek|T]) ->
 convert(Out, [H|T]) ->
   convert(Out ++ [ { line, element(2, H) } ] ++ convert2(H, nil), T)
   .
-  
+
+convert2({export_stmt,_Line,Exports}, Next) ->
+  "-export([" ++ convert_stmts(",", Exports) ++ "])."
+  ;
 convert2({export,_Line,Func,ArgCount}, Next) ->
   io_lib:format("~s/~p", [ Func, ArgCount ])
+  ;
+convert2({pre_author,_Line,Author}, Next) ->
+  "-author(" ++ convert_stmts(Author) ++ ")."
+  ;
+convert2({pre_define,_Line,Term,Expr}, Next) ->
+  "-define(" ++ convert_stmts(Term) ++ "," ++ convert_stmts(Expr) ++ ")."
   ;
 convert2({'begin',Line,Indent}, Next) ->
   [ { indent, Indent}, { line, Line } ]
@@ -314,11 +321,14 @@ convert2({function_def,_Line,Name,Body}, Next) ->
   ,Name ++ convert_stmts(Body) ++ Term
   ;
 convert2({function_body, _, Args, When, Body}, Next) ->
-  WhenPart = if
-    When == nil -> ""
-    ;true -> " when " ++ convert_stmts(When)
-    end
-  ,convert_stmts(Args) ++ WhenPart ++ " -> " ++ convert_stmts(",", Body)
+  WhenPart = convert_stmts(When)
+  ,convert_stmts(Args) ++ WhenPart ++ convert_stmts(",", Body)
+  ;
+convert2({'when', _Line, Guard}, Next) ->
+  if
+    Guard == nil -> " -> "
+    ;true -> " when " ++ convert_stmts(Guard) ++ " -> "
+  end
   ;
 convert2({arg_list, _, Args}, Next) ->
   "(" ++ convert_stmts(", ", Args) ++ ")"
@@ -335,8 +345,8 @@ convert2({'if', Line, Branches}, Next) ->
 convert2({'receive', Line, Branches}, Next) ->
   "receive " ++ convert_stmts("; ", Branches) ++ " end"
   ;
-convert2({branch, Line, Expr, Stmts}, Next) ->
-  convert_stmts(Expr) ++ " -> " ++ convert_stmts(", ", Stmts)
+convert2({branch, _Line, Expr, When, Stmts}, Next) ->
+  convert_stmts(Expr) ++ convert_stmts(When) ++ convert_stmts(", ", Stmts)
   ;
 convert2({'after', Line, Expr, Stmts}, Next) ->
   "after " ++ convert_stmts(Expr) ++ " -> " ++ convert_stmts(", ", Stmts)
@@ -348,11 +358,15 @@ convert2({'fun_export', Line, Export}, Next) ->
   "fun " ++ convert_stmts(Export)
   ;
 convert2({'try', Line, Stmts, Catches, After}, Next) ->
-  AfterPart = case After of
+  CatchPart = case Catches of
+    nil -> ""
+    ;_ -> " catch " ++ convert_stmts("; ", Catches)
+  end
+  ,AfterPart = case After of
     nil -> ""
     ;_ -> " after " ++ convert_stmts(", ", After)
   end
-  ,"try " ++ convert_stmts(", ", Stmts) ++ " catch " ++ convert_stmts("; ", Catches) ++ AfterPart ++ " end"
+  ,"try " ++ convert_stmts(", ", Stmts) ++ CatchPart ++ AfterPart ++ " end"
   ;
 convert2({macro, Line, Name, nil}, Next) ->
   Name
