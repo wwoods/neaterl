@@ -42,7 +42,7 @@ run_text(Eval, T=[$-|_]) ->
       display(not_implemented)
 run_text(Eval, T) ->
   try
-    ErlCode = neaterl:string(T)
+    {ok,ErlCode} = neaterl:string(T)
     Eval ! { self(), code, ErlCode }
     receive { result, Result } -> io:format("~p~n", [ Result ])
   catch
