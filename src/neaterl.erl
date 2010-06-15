@@ -10,11 +10,11 @@
 %No more ',' for "Then do this" (Unless two statements are on the same line)
 %No more ';' for "else"
 
+%TODO: More unit tests
+%TODO: Nice error messages
 %TODO: Pipe char '|' - Pipes output of A to B
 %TODO: Auto line-carry when next line starts with ',', '+', '-', '++', '--', '*', '/', '|'
-%TODO: Read and respond to blogs
-%TODO: Strip blank lines, unroll statements before convert()
-%TODO: Maybe: Disallow going from an inline clause to an indented one
+%TODO: Maybe: Disallow going from an inline clause to an indented one... kindof already done
 
 -define(COMPILE_DEFAULTS, [ verbose, report ]).
 -define(COMPILE_TEMP, "temp_neaterl.erl").

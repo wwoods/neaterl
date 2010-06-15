@@ -1,6 +1,8 @@
 %Neat / tidy erlang grammar
 
-%TODO - Change catch syntax from "Type of Reason"
+%TODO - Binary Support
+%TODO - Record support
+%TODO - Change catch syntax from "Type of Reason" (maybe)
 %TODO - Capitalize Nonterminals.
 %TODO - Multiline comments / remainder / div
 
