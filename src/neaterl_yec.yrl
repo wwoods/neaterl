@@ -26,7 +26,7 @@ expression expression_atom uminus unot ucatch binary_op try_expr
 list tuple
 list_arg_parts_list list_arg_parts_list2
 func_call 
-anon_fun anon_fun_clause_block anon_fun_clause_line anon_fun_clause_list anon_fun_clause
+anon_fun fun_clause_block fun_clause_line fun_clause_list
 .
 
 Terminals 
@@ -98,7 +98,8 @@ module_statement_list -> module_statement : stmts_to_list('$1').
 module_statement_list -> module_statement line module_statement_list : stmts_to_list('$1') ++ '$3'.
 module_statement_list -> line : [].
 
-module_statement -> atom func_def_body : { function_def, line_of('$1'), list_value_of('$1'), '$2' }.
+module_statement -> atom fun_clause_block : { function_def, line_of('$1'), list_value_of('$1'), '$2' }.
+module_statement -> atom '/' integer fun_clause_block : { function_def, line_of('$1'), list_value_of('$1'), '$4' }.
 module_statement -> export : '$1'.
 module_statement -> prep_import '(' atom ')' : { constant, line_of('$1'), "-import(" ++ list_value_of('$3') ++ ")." }.
 module_statement -> prep_author '(' expression ')' : { pre_author, line_of('$1'), '$3' }.
@@ -182,19 +183,17 @@ branch -> expression when_clause statement_block : { branch, line_of('$1'), '$1'
 branch -> 'after' expression '->' statement_block : { 'after', line_of('$1'), '$2', '$4' }.
 branch -> expression 'of' expression when_clause statement_block : { branch, line_of('$1'), { binary_op, line_of('$1'), ":", '$1', '$3' }, '$4', '$5' }.
 
-anon_fun -> 'fun' anon_fun_clause_block : { 'fun', line_of('$1'), '$2' }.
+anon_fun -> 'fun' fun_clause_block : { 'fun', line_of('$1'), '$2' }.
 anon_fun -> 'fun' export_func : { 'fun_export', line_of('$1'), '$2' }.
 
-anon_fun_clause_block -> anon_fun_clause_line : '$1'.
-anon_fun_clause_block -> 'begin' anon_fun_clause_list 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].
+fun_clause_block -> fun_clause_line : '$1'.
+fun_clause_block -> 'begin' fun_clause_list 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].
 
-anon_fun_clause_line -> anon_fun_clause : [ '$1' ].
-anon_fun_clause_line -> anon_fun_clause ',' anon_fun_clause_line : [ '$1' ] ++ '$3'.
+fun_clause_line -> func_def_body : [ '$1' ].
+fun_clause_line -> func_def_body ',' fun_clause_line : [ '$1' ] ++ '$3'.
 
-anon_fun_clause_list -> anon_fun_clause : [ '$1' ].
-anon_fun_clause_list -> anon_fun_clause line anon_fun_clause_list : [ '$1' ] ++ '$3'.
-
-anon_fun_clause -> func_def_body : '$1'.
+fun_clause_list -> func_def_body : [ '$1' ].
+fun_clause_list -> func_def_body line fun_clause_list : [ '$1' ] ++ '$3'.
 
 %try_expr is a statement because it uses multiple lines...Consider using it as an expression
 %in a parameter:
@@ -292,7 +291,7 @@ list_arg_parts_list2 -> expression : [ '$1' ].
 list_arg_parts_list2 -> expression line list_arg_parts_list2 : [ '$1' ] ++ '$3'.
 list_arg_parts_list2 -> '|' expression : [ { list_tail, '$2' } ].
 
-tuple -> '{' '}' : { tuple, [] }.
+tuple -> '{' '}' : { tuple, line_of('$1'), [] }.
 tuple -> '{' arg_parts_inline '}' : { tuple, line_of('$1'), '$2' }.
 tuple -> '{' arg_parts_list : { tuple, line_of('$1'), '$2' }.
 

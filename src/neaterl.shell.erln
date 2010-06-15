@@ -29,24 +29,25 @@ run(Eval) ->
       run_text(Eval, Text)
       ?MODULE:run(Eval)
       
-run_text(Eval, T=[$-|_]) ->
-  %Module level code
-  case lists:prefix("-module", T) of
-    true ->
-      %Module definition
-      try display(neaterl:load_string(T))
-      catch
-        error of Reason -> io:format("Error: ~p~n", [ Reason ])
-    _ -> 
-      %Special shell code
-      display(not_implemented)
-run_text(Eval, T) ->
-  try
-    {ok,ErlCode} = neaterl:string(T)
-    Eval ! { self(), code, ErlCode }
-    receive { result, Result } -> io:format("~p~n", [ Result ])
-  catch
-    error of Reason -> io:format("Error: ~p~n", [ Reason ])
+run_text
+  (Eval, T=[$-|_]) ->
+    %Module level code
+    case lists:prefix("-module", T) of
+      true ->
+        %Module definition
+        try display(neaterl:load_string(T))
+        catch
+          error of Reason -> io:format("Error: ~p~n", [ Reason ])
+      _ -> 
+        %Special shell code
+        display(not_implemented)
+  (Eval, T) ->
+    try
+      {ok,ErlCode} = neaterl:string(T)
+      Eval ! { self(), code, ErlCode }
+      receive { result, Result } -> io:format("~p~n", [ Result ])
+    catch
+      error of Reason -> io:format("Error: ~p~n", [ Reason ])
           
 display(Value) ->
   io:format("~p~n", [ Value ])
@@ -60,18 +61,19 @@ read_lines(Out, Index) ->
     Line == "\n" -> Out ++ [ Line ]
     true -> read_lines(Out ++ [ Line ], Index + 1)
   
-read_lines_module(Out, Index, 2) ->
-  Out
-read_lines_module(Out, Index, SeqBlanks) ->
-  Line = read_single_line(Index)
-  if
-    Line == "oops\n" -> read_lines_module(
-      lists:sublist(Out, length(Out) - 1)
-      Index - 1
-      0
-    Line == "\n" -> read_lines_module(Out ++ [ Line ], Index + 1, SeqBlanks + 1)
-    true -> read_lines_module(Out ++ [ Line ], Index + 1, 0)
-    
+read_lines_module
+  (Out, Index, 2) ->
+    Out
+  (Out, Index, SeqBlanks) ->
+    Line = read_single_line(Index)
+    if
+      Line == "oops\n" -> read_lines_module(
+        lists:sublist(Out, length(Out) - 1)
+        Index - 1
+        0
+      Line == "\n" -> read_lines_module(Out ++ [ Line ], Index + 1, SeqBlanks + 1)
+      true -> read_lines_module(Out ++ [ Line ], Index + 1, 0)
+      
 read_single_line(Index) ->
   io:get_line(
     lists:flatten(io_lib:format("N~2.B> ", [ Index ]))
@@ -93,39 +95,41 @@ eval(Bindings) ->
       io:format("neaterl.shell:eval/1 received: ~p~n", [ Other ])
       ?MODULE:eval(Bindings)
       
-shell_funs(f, [], Bindings) ->
-  {value, ok, erl_eval:new_bindings()}
-shell_funs(f, Args, Bindings) ->
-  {
-    value
-    ok
-    lists:foldl(
-      fun({var,_,Name},NewBindings) -> erl_eval:del_binding(Name, NewBindings)
-      Bindings
+shell_funs/3
+  (f, [], Bindings) ->
+    {value, ok, erl_eval:new_bindings()}
+  (f, Args, Bindings) ->
+    {
+      value
+      ok
+      lists:foldl(
+        fun({var,_,Name},NewBindings) -> erl_eval:del_binding(Name, NewBindings)
+        Bindings
+        Args
+  (Name, Args, Bindings) ->
+    NewArgs = lists:map(
+      fun(X) ->
+        {value,Result,Bindings} = erl_eval:expr(X, Bindings)
+        Result
       Args
-shell_funs(Name, Args, Bindings) ->
-  NewArgs = lists:map(
-    fun(X) ->
-      {value,Result,Bindings} = erl_eval:expr(X, Bindings)
-      Result
-    Args
-  {value,shell_funs(Name, NewArgs),Bindings}
+    {value,shell_funs(Name, NewArgs),Bindings}
 
-shell_funs(c, [ File ]) ->
-  shell_funs(c, [ File, [ verbose, report ] ])
-shell_funs(c, [ File, Options ]) ->
-  try
-    neaterl:load_file(File, Options)
-  catch
-    error of Reason ->
-      if 
-        {badmatch,{error,enoent}} =/= Reason ->
-          Reason
-        true ->
-          {ok,Module,Binary} = compile:file(File, [binary] ++ Options)
-          code:purge(Module)
-          code:load_binary(Module, File, Binary)
-          
-shell_funs(m, [ Module ]) ->
-  [H|_] = Module:module_info()
-  element(2, H)
+shell_funs %/2
+  (c, [ File ]) ->
+    shell_funs(c, [ File, [ verbose, report ] ])
+  (c, [ File, Options ]) ->
+    try
+      neaterl:load_file(File, Options)
+    catch
+      error of Reason ->
+        if 
+          {badmatch,{error,enoent}} =/= Reason ->
+            Reason
+          true ->
+            {ok,Module,Binary} = compile:file(File, [binary] ++ Options)
+            code:purge(Module)
+            code:load_binary(Module, File, Binary)
+            
+  (m, [ Module ]) ->
+    [H|_] = Module:module_info()
+    element(2, H)

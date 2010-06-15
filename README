@@ -76,9 +76,10 @@ following into it:
 
 hello_world() -> io:format("Hello, World!~n", [])
 
-fac(0) -> 1
-fac(N) when is_integer(N) andalso N > 0 ->
-  N * fac(N - 1)
+fac
+  (0) -> 1
+  (N) when is_integer(N) and N > 0 ->
+    N * fac(N - 1)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 Then, open up any erlang prompt, and run "neaterl:compile(test)" to
@@ -172,4 +173,16 @@ The compiler will choose the appropriate symbol based on if the operator
 occurs in a guard expression or not.  To see how these symbols translate,
 use the "keep_temp" option in neaterl's compilation.  Note that, at 
 present, there is no non-shortcircuiting version of these operators.
+
+--Functions With Multiple Matches--
+Functions in neaterl only have their name once, followed by any number of 
+body definitions, much like Erlang's anonymous function syntax.  E.G.:
+
+fac
+  (0) -> 1
+  (N) when is_integer(N) and N > 0 ->
+    N * fac(N-1)
+    
+Which helps to keep the bodies grouped together and makes a functional 
+grouping more readily identifiable.
 

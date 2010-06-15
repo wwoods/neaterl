@@ -4,24 +4,26 @@
 %Treat ',' and '\n' as same concept (a separator).
 %Allow [,\n] at front of list terms
 
-fac(0) -> 1
-fac(N) when is_integer(N) and N>0 ->
-  N * fac(N-1)
+fac
+  (0) -> 1
+  (N) when is_integer(N) and N>0 ->
+    N * fac(N-1)
 
 -define(MOD(), 36)
 
-test(0) ->
-  put(myatom, "hello world")
-  erlang:display(get(myatom))
-  case true of
-    $1 -> duh
-    false -> never
-    true -> always
+test/1
+  (0) ->
+    put(myatom, "hello world")
+    erlang:display(get(myatom))
+    case true of
+      $1 -> duh
+      false -> never
+      true -> always
 
-test(N) ->
-  if
-    N == 1 -> true
-    true -> ?MODULE:test(N-1)
+  (N) ->
+    if
+      N == 1 -> true
+      true -> ?MODULE:test(N-1)
     
 anontest() ->
   J=fun

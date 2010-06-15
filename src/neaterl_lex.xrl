@@ -46,6 +46,10 @@ Rules.
   {token,{'char_expr',TokenLine,TokenChars}}.
 \$\\\\ :
   {token,{'char_expr',TokenLine,TokenChars}}.
+\$\\n :
+  {token,{'char_expr',TokenLine,TokenChars}}.
+\$\\r :
+  {token,{'char_expr',TokenLine,TokenChars}}.
 \$\\x{\d+} :
   {token,{'char_expr',TokenLine,TokenChars}}.
 case :

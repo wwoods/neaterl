@@ -125,7 +125,7 @@ string(String, Options) ->
   ,proplists:is_defined(debug_neaterl, Options) andalso io:format("Tokens: ~p~n", [ L ])
   ,{ok,Y}=neaterl_yec:parse(L)
   ,proplists:is_defined(debug_neaterl, Options) andalso io:format("Parsed as: ~p~n", [ Y ])
-  ,{ok,convert(Y)}
+  ,{ok,convert(Y, Options)}
   .
   
 load_file(File) ->
@@ -246,17 +246,18 @@ convert_output(Out, Line, Indent, [H|T]) when is_integer(H) ->
   convert_output(Out ++ [ H ], Line, Indent, T)
   .
 
-convert({module, Name, Stmts}) ->
+convert({module, Name, Stmts}, Options) ->
   Out=lists:flatten([ 
     io_lib:format("-module(~s).", [Name])
     ,{ line, 2 }
     , convert("", Stmts, [])
     ])
+  ,proplists:is_defined(debug_neaterl, Options) andalso io:format("Output Array: ~p~n", [ Out ])
   ,convert_output("", 1, "", Out)
   ;
-convert(List) when is_list(List) ->
+convert(List, Options) when is_list(List) ->
   %expressions
-  Out = convert_stmts(",", List, []) ++ "."
+  Out = lists:flatten(convert_stmts(",", List, []) ++ ".")
   ,convert_output("", 1, "", Out)
   .
   
@@ -312,11 +313,7 @@ convert2({constant,_Line,String}, Next, State) ->
   String
   ;
 convert2({function_def,_Line,Name,Body}, Next, State) ->
-  Term = case function_def_match({function_def,_Line,Name,Body}, Next) of
-    true -> ";"
-    ;false -> "."
-    end
-  ,Name ++ convert_stmts(Body, State) ++ Term
+  Name ++ convert_stmts("; " ++ Name, Body, State) ++ "."
   ;
 convert2({function_body, _, Args, When, Body}, Next, State) ->
   WhenPart = convert_stmts(When, State)
