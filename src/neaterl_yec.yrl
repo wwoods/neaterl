@@ -17,9 +17,10 @@
 
 Nonterminals 
 sep
-module export export_list export_func
+module module_start export export_list export_func
 module_statement_list module_statement
-statement_list statement_block statement_line statement
+statement_list statement_block statement_line 
+statement_with_line statement_with_noline
 branch_block branch_list branch_line branch
 func_def_body when_clause
 arg_list arg_parts_inline arg_parts_list arg_parts_list2
@@ -38,6 +39,7 @@ Terminals
 line 'begin' 'end' ',' 'char_expr'
 atom float integer variable string macro
 prep_module prep_export prep_import prep_author prep_define
+prep_behaviour prep_compile prep_extends
 'case' 'of' 'if' 'when'
 'andalso' 'orelse' 'not' 'and' 'or' 'xor'
 'fun'
@@ -45,7 +47,7 @@ prep_module prep_export prep_import prep_author prep_define
 'try' 'catch'
 .
 
-Rootsymbol module.
+Rootsymbol module_start.
 
 % Intentionally reordered.. though not entirely effective at the moment, 
 % since it compiles down to erlang :)
@@ -80,6 +82,9 @@ Unary 800 uminus.
 Left 900 '#'.
 Left 1000 ':'.
 
+module_start -> module : '$1'.
+module_start -> line module : '$2'.
+
 module -> prep_module '(' atom ')' line module_statement_list
   : { module, value_of('$3'), '$6' }.
   
@@ -96,30 +101,34 @@ export_list -> export_func sep export_list
   : [ '$1' ] ++ '$3' .
 export_func -> atom '/' integer : { export, line_of('$1'), value_of('$1'), value_of('$3') }.
   
-module_statement_list -> module_statement : stmts_to_list('$1').
+module_statement_list -> module_statement line : stmts_to_list('$1').
 module_statement_list -> module_statement line module_statement_list : stmts_to_list('$1') ++ '$3'.
-module_statement_list -> line : [].
 
 module_statement -> atom fun_clause_block : { function_def, line_of('$1'), list_value_of('$1'), '$2' }.
 module_statement -> atom '/' integer fun_clause_block : { function_def, line_of('$1'), list_value_of('$1'), '$4' }.
 module_statement -> export : '$1'.
 module_statement -> prep_import '(' atom ')' : { constant, line_of('$1'), "-import(" ++ list_value_of('$3') ++ ")." }.
 module_statement -> prep_author '(' expression ')' : { pre_author, line_of('$1'), '$3' }.
-module_statement -> prep_define '(' expression ',' statement ')' : { pre_define, line_of('$1'), '$3', '$5' }.
-module_statement -> prep_define '(' 'begin' expression line statement 'end' : { pre_define, line_of('$1'), '$4', '$6' }.
+module_statement -> prep_behaviour '(' atom ')' : { constant, line_of('$1'), "-behaviour(" ++ list_value_of('$3') ++ ")." }.
+module_statement -> prep_extends '(' atom ')' : { constant, line_of('$1'), "-extends(" ++ list_value_of('$3') ++ ")." }.
+module_statement -> prep_compile '(' expression ')' : { pre_compile, line_of('$1'), '$3' }.
+module_statement -> prep_define '(' expression ',' statement_line ')' : { pre_define, line_of('$1'), '$3', '$5' }.
+module_statement -> prep_define '(' 'begin' expression line statement_list 'end' : { pre_define, line_of('$1'), '$4', '$6' }.
 
-statement_block -> statement : '$1'.
+statement_block -> statement_line : '$1'.
 statement_block -> 'begin' statement_list 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].
 
-statement_list -> statement : [ '$1' ].
-statement_list -> statement line statement_list : [ '$1' ] ++ '$3'.
+statement_list -> statement_with_line : [ '$1' ].
+statement_list -> statement_with_line statement_list : [ '$1' ] ++ '$2'.
 
-statement_line -> statement : stmts_to_list('$1').
+statement_line -> statement_with_noline : stmts_to_list('$1').
 %statement_line -> statement ',' statement_line : stmts_to_list('$1') ++ '$3'.
 %statement_line -> statement ';' : stmts_to_list('$1').
 
-statement -> expression : '$1'.
-statement -> try_expr : '$1'.
+statement_with_noline -> expression : '$1'.
+
+statement_with_line -> expression line : '$1'.
+statement_with_line -> try_expr : '$1'.
 
 guard_expression -> expression : { guard_expr, line_of('$1'), '$1' }.
 
@@ -129,10 +138,8 @@ expression -> 'if' branch_block : { 'if', line_of('$1'), '$2' }.
 expression -> 'receive' branch_block : { 'receive', line_of('$1'), '$2' }.
 expression -> func_call : '$1'.
 expression -> anon_fun : '$1'.
-expression -> list : '$1'.
-expression -> tuple : '$1'.
-expression -> expression_atom : '$1'.
 expression -> expression binary_op expression : { binary_op, line_of('$1'), list_value_of('$2'), '$1', '$3' }.
+expression -> expression_atom : '$1'.
 expression -> uminus : '$1'.
 expression -> unot : '$1'.
 expression -> ucatch : '$1'.
@@ -170,16 +177,18 @@ expression_atom -> integer : constant_from('$1').
 expression_atom -> float : constant_from('$1').
 expression_atom -> string : constant_from('$1').
 expression_atom -> 'char_expr' : constant_from('$1').
+expression_atom -> list : '$1'.
+expression_atom -> tuple : '$1'.
 expression_atom -> '(' expression ')' : { paren_expr, line_of('$1'), '$2' }.
 
 branch_block -> 'begin' branch_list 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].
 branch_block -> branch_line : '$1'.
 
-branch_list -> branch : [ '$1' ].
+branch_list -> branch line : [ '$1' ].
 branch_list -> branch line branch_list : [ '$1' ] ++ '$3'.
 
 branch_line -> branch : [ '$1' ].
-branch_line -> branch branch_line : [ '$1' ] ++ '$2'.
+%branch_line -> branch branch_line : [ '$1' ] ++ '$2'.
 
 branch -> expression when_clause statement_block : { branch, line_of('$1'), '$1', '$2', '$3' }.
 branch -> 'after' expression '->' statement_block : { 'after', line_of('$1'), '$2', '$4' }.
@@ -194,7 +203,7 @@ fun_clause_block -> 'begin' fun_clause_list 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ]
 fun_clause_line -> func_def_body : [ '$1' ].
 fun_clause_line -> func_def_body ',' fun_clause_line : [ '$1' ] ++ '$3'.
 
-fun_clause_list -> func_def_body : [ '$1' ].
+fun_clause_list -> func_def_body line : [ '$1' ].
 fun_clause_list -> func_def_body line fun_clause_list : [ '$1' ] ++ '$3'.
 
 %try_expr is a statement because it uses multiple lines...Consider using it as an expression
@@ -205,9 +214,9 @@ fun_clause_list -> func_def_body line fun_clause_list : [ '$1' ] ++ '$3'.
 %  catch c
 %  parm3
 %For this, the catch() expression should be used instead.
-try_expr -> 'try' statement_block line 'catch' branch_block : { 'try', line_of('$1'), '$2', '$5', nil }.
-try_expr -> 'try' statement_block line 'catch' branch_block line 'after' statement_block : { 'try', line_of('$1'), '$2', '$5', '$8' }.
-try_expr -> 'try' statement_block line 'after' statement_block : { 'try', line_of('$1'), '$2', nil, '$5' }.
+try_expr -> 'try' statement_block line 'catch' branch_block line : { 'try', line_of('$1'), '$2', '$5', nil }.
+try_expr -> 'try' statement_block line 'catch' branch_block line 'after' statement_block line : { 'try', line_of('$1'), '$2', '$5', '$8' }.
+try_expr -> 'try' statement_block line 'after' statement_block line : { 'try', line_of('$1'), '$2', nil, '$5' }.
 % Excluding try..of unless I hear a good reason it's meaningful.
 % I could see scoping arguments, maybe.  But they don't appear to be affected.
 
@@ -258,7 +267,7 @@ arg_parts_inline -> expression : [ '$1' ].
 arg_parts_inline -> expression sep arg_parts_inline : [ '$1' ] ++ '$3'.
 
 arg_parts_list -> 'begin' arg_parts_list2 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].
-arg_parts_list2 -> expression : [ '$1' ].
+arg_parts_list2 -> expression line : [ '$1' ].
 arg_parts_list2 -> expression line arg_parts_list2 : [ '$1' ] ++ '$3'.
 
 func_def_body -> arg_list when_clause statement_block : { function_body, line_of('$1'), '$1', '$2', '$3' }.
@@ -273,7 +282,7 @@ sep -> ',' : nil.
 
 list -> '[' ']' : { list, line_of('$1'), [], nil }.
 list -> '[' arg_parts_inline ']' : { list, line_of('$1'), '$2', nil }.
-list -> '[' arg_parts_inline '|' variable ']' : { list, line_of('$1'), '$2', constant_from('$4') }.
+list -> '[' arg_parts_inline '|' expression_atom ']' : { list, line_of('$1'), '$2', '$4' }.
 list -> '[' list_arg_parts_list :
   case '$2' of
     {X,Y} -> { list, line_of('$1'), X, Y }
@@ -289,9 +298,9 @@ list_arg_parts_list -> 'begin' list_arg_parts_list2 'end'
     end
   .
 
-list_arg_parts_list2 -> expression : [ '$1' ].
+list_arg_parts_list2 -> expression line: [ '$1' ].
 list_arg_parts_list2 -> expression line list_arg_parts_list2 : [ '$1' ] ++ '$3'.
-list_arg_parts_list2 -> '|' expression : [ { list_tail, '$2' } ].
+list_arg_parts_list2 -> '|' expression line : [ { list_tail, '$2' } ].
 
 tuple -> '{' '}' : { tuple, line_of('$1'), [] }.
 tuple -> '{' arg_parts_inline '}' : { tuple, line_of('$1'), '$2' }.

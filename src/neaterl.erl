@@ -34,14 +34,26 @@ make_all([]) ->
 make_all([{Pattern, Options}|T]) ->
   Files = filelib:wildcard(Pattern)
   ,ErlnFiles = lists:filter(fun(X) -> lists:suffix(".erln", X) end, Files)
-  ,lists:map(fun(X) -> io:format("Recompile: ~s~n", [X]), compile(X, Options ++ [ report ]) end
+  ,lists:foldl(
+    fun(X, Y) -> 
+      io:format("Recompile: ~s~n", [X])
+      , try
+        compile(X, Options ++ [ report ])
+        , Y
+      catch
+        error:Any ->
+          io:format("Errors found: ~p, ~p~n", [ error, Any ])
+          ,failure
+      end
+    end
+    , success
     , lists:map(fun(X) -> lists:sublist(X, length(X) - length(".erln")) end, ErlnFiles)
     )
   ,make_all(T)
   .
   
 load_makefile() ->
-  [ {"src/*", [ debug_info, {outdir, "ebin"}, {i, "include"}, debug_neaterl ] } ]
+  [ {"src/*", [ debug_info, {outdir, "ebin"}, {i, "include"} ] } ]
   .
 
 %Read file from http://wiki.trapexit.erlang-consulting.com/Read_File_to_List
@@ -201,10 +213,10 @@ convert_indents(List) ->
   .
   
 convert_indents(Out, [Cur,Next|Indents], []) ->
-  convert_indents(Out ++ [{'end', element(2, lists:last(Out)), ""}], [Next] ++ Indents, [])
+  convert_indents(Out ++ [{line,nil},{'end', element(2, lists:last(Out)), ""}], [Next] ++ Indents, [])
   ;
 convert_indents(Out, [_Single|_], []) ->
-  Out
+  Out ++ [{line,nil}]
   ;
 convert_indents(Out, Indents, [{indent,Line,New},{indent,NextLine,NextText}|T]) ->
   convert_indents(Out, Indents, [{indent,NextLine,NextText}] ++ T)
@@ -216,7 +228,7 @@ convert_indents(Out, [Cur|Indents], [{indent,Line,New}|T]) ->
   if
     length(New) > length(Cur) -> convert_indents(Out ++ [{'begin',Line,New}], [New] ++ [Cur] ++ Indents, T)
     ;length(New) == length(Cur) -> convert_indents(Out ++ [{line,Line}], [Cur] ++ Indents, T)
-    ;true -> convert_indents(Out ++ [{'end',Line,New}], Indents, [{indent,Line,New}] ++ T)
+    ;true -> convert_indents(Out ++ [{line,Line},{'end',Line,New}], Indents, [{indent,Line,New}] ++ T)
   end
   ;
 convert_indents(Out, Indents, [H|T]) ->
@@ -299,6 +311,9 @@ convert2({export,_Line,Func,ArgCount}, Next, State) ->
   ;
 convert2({pre_author,_Line,Author}, Next, State) ->
   "-author(" ++ convert_stmts(Author, State) ++ ")."
+  ;
+convert2({pre_compile,_Line,Option}, Next, State) ->
+  "-compile(" ++ convert_stmts(Option, State) ++ ")."
   ;
 convert2({pre_define,_Line,Term,Expr}, Next, State) ->
   "-define(" ++ convert_stmts(Term, State) ++ "," ++ convert_stmts(Expr, State) ++ ")."
@@ -467,7 +482,7 @@ list_length(Out, [H|T]) ->
 %% Neat Erl Tests
 
 compile_test() ->
-  {module,J} = load_file("examples/example", [debug_info,verbose,report])
+  {module,J} = load_file("examples/example", [debug_info,verbose,report,debug_neaterl])
   ,6=J:fac(3)
   %Lookup eunit docs for more...
   .
