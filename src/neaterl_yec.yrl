@@ -264,7 +264,7 @@ arg_list -> '(' arg_parts_inline ')' : { arg_list, line_of('$1'), '$2' }.
 arg_list -> '(' arg_parts_list : { arg_list, line_of('$1'), '$2' }.
 
 arg_parts_inline -> expression : [ '$1' ].
-arg_parts_inline -> expression sep arg_parts_inline : [ '$1' ] ++ '$3'.
+arg_parts_inline -> expression ',' arg_parts_inline : [ '$1' ] ++ '$3'.
 
 arg_parts_list -> 'begin' arg_parts_list2 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].
 arg_parts_list2 -> expression line : [ '$1' ].
