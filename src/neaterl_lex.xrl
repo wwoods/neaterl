@@ -42,8 +42,8 @@ Rules.
   {token,{'=/=',TokenLine,TokenChars}}.
 >= :
   {token,{'>=',TokenLine,TokenChars}}.
-<= :
-  {token,{'<=',TokenLine,TokenChars}}.
+=< :
+  {token,{'=<',TokenLine,TokenChars}}.
 \+\+ :
   {token,{'++',TokenLine,TokenChars}}.
 \-\- :
@@ -112,6 +112,10 @@ catch :
   {token,{atom,TokenLine,TokenChars}}.
 [A-Z_][0-9a-zA-Z_]* :
   {token,{variable,TokenLine,TokenChars}}.
+div : 
+  {token,{'div',TokenLine,TokenChars}}.
+rem :
+  {token,{'rem',TokenLine,TokenChars}}.
 [\[\]\{\}\\+\-\*\/%\:\;\|\(\)!><=\.\,=\#] :
   [H|_]=TokenChars
   ,{token,{list_to_atom([H]),TokenLine,TokenChars}}.

@@ -15,6 +15,8 @@
 %TODO: Pipe char '|' - Pipes output of A to B
 %TODO: Auto line-carry when next line starts with ',', '+', '-', '++', '--', '*', '/', '|'
 %TODO: Maybe: Disallow going from an inline clause to an indented one... kindof already done
+%TODO: Think about records
+%TODO: Wouldn't it be nice to have inheritable receive clauses?
 
 -define(COMPILE_DEFAULTS, [ verbose, report ]).
 -define(COMPILE_TEMP, "temp_neaterl.erl").

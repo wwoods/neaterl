@@ -33,8 +33,8 @@ anon_fun fun_clause_block fun_clause_line fun_clause_list
 .
 
 Terminals 
-'(' ')' '@' '[' ']' '{' '}' '+' '-' '/' '*' '.' '>' '<' '|' '#'
-'->' '++' '--' '!' ':' ';' '=' '==' '>=' '<='
+'(' ')' '@' '[' ']' '{' '}' '+' '-' '/' '*' '.' '>' '<' '|' '#' 'div' 'rem'
+'->' '++' '--' '!' ':' ';' '=' '==' '>=' '=<'
 '/=' '=:=' '=/='
 line 'begin' 'end' ',' 'char_expr'
 atom float integer variable string macro
@@ -70,13 +70,15 @@ Left 60 '=/='.
 Left 60 '>'.
 Left 60 '<'.
 Left 60 '>='.
-Left 60 '<='.
+Left 60 '=<'.
 Right 80 '++'.
 Right 80 '--'.
 Left 100 '+'.
 Left 100 '-'.
 Left 200 '*'.
 Left 200 '/'.
+Left 200 'div'.
+Left 200 'rem'.
 %'rem' and 'div' at some point - integer remainding and division.  Maybe under % and / though.
 Unary 800 uminus.
 Left 900 '#'.
@@ -156,7 +158,7 @@ binary_op -> 'xor' : '$1'.
 binary_op -> '>' : '$1'.
 binary_op -> '<' : '$1'.
 binary_op -> '>=' : '$1'.
-binary_op -> '<=' : '$1'.
+binary_op -> '=<' : '$1'.
 binary_op -> '==' : '$1'.
 binary_op -> '/=' : '$1'.
 binary_op -> '=:=' : '$1'.
@@ -166,6 +168,8 @@ binary_op -> '+' : '$1'.
 binary_op -> '-' : '$1'.
 binary_op -> '*' : '$1'.
 binary_op -> '/' : '$1'.
+binary_op -> 'div' : { 'div', line_of('$1'), " div " }.
+binary_op -> 'rem' : { 'rem', line_of('$1'), " rem " }.
 binary_op -> '++' : '$1'.
 binary_op -> '--' : '$1'.
 
