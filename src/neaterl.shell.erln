@@ -15,7 +15,7 @@
 
 run() ->
   Eval = spawn_link(?MODULE, eval, [ erl_eval:new_bindings() ])
-  register(neaterl_eval, Eval)
+  put(neaterl_eval, Eval)
   run(Eval)
   
 run(Eval) ->
