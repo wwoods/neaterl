@@ -15,7 +15,7 @@
 %Walt Woods, 10 June 2010
 
 run() ->
-  Shell = spawn(?MODULE, init, [ ])
+  Shell = spawn_link(?MODULE, init, [ ])
   erlang:monitor(process, Shell)
   receive
     { 'DOWN', _Ref, process, Shell, normal } -> ok
