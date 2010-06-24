@@ -1,5 +1,6 @@
 -module(neaterl.shell)
--export([run/0, run/1, eval/1 ])
+-export([run/0, eval/1 ])
+-export([init/0,run/1])
 
 -import(io)
 -import(io_lib)
@@ -14,9 +15,17 @@
 %Walt Woods, 10 June 2010
 
 run() ->
+  Shell = spawn(?MODULE, init, [ ])
+  erlang:monitor(process, Shell)
+  receive
+    { 'DOWN', _Ref, process, Shell, normal } -> ok
+    { 'DOWN', _Ref, process, Shell, Reason } -> { shell_died, Reason }
+
+init() ->
   Eval = spawn_link(?MODULE, eval, [ erl_eval:new_bindings() ])
   put(neaterl_eval, Eval)
   run(Eval)
+  exit(Eval, shell_close)
   
 run(Eval) ->
   Text = lists:flatten(read_lines([], 1))
@@ -30,7 +39,7 @@ run(Eval) ->
       ?MODULE:run(Eval)
       
 run_text
-  (Eval, T=[$-|_]) ->
+  (_Eval, T=[$-|_]) ->
     %Module level code
     case lists:prefix("-module", T) of
       true ->
@@ -62,7 +71,7 @@ read_lines(Out, Index) ->
     true -> read_lines(Out ++ [ Line ], Index + 1)
   
 read_lines_module
-  (Out, Index, 2) ->
+  (Out, _Index, 2) ->
     Out
   (Out, Index, SeqBlanks) ->
     Line = read_single_line(Index)
@@ -96,7 +105,7 @@ eval(Bindings) ->
       ?MODULE:eval(Bindings)
       
 shell_funs/3
-  (f, [], Bindings) ->
+  (f, [], _OldBindings) ->
     {value, ok, erl_eval:new_bindings()}
   (f, Args, Bindings) ->
     {
