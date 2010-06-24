@@ -106,7 +106,7 @@ export_func -> atom '/' integer : { export, line_of('$1'), value_of('$1'), value
 module_statement_list -> module_statement line : stmts_to_list('$1').
 module_statement_list -> module_statement line module_statement_list : stmts_to_list('$1') ++ '$3'.
 
-module_statement -> atom fun_clause_block : { function_def, line_of('$1'), list_value_of('$1'), '$2' }.
+module_statement -> atom func_def_body : { function_def, line_of('$1'), list_value_of('$1'), '$2' }.
 module_statement -> atom '/' integer fun_clause_block : { function_def, line_of('$1'), list_value_of('$1'), '$4' }.
 module_statement -> export : '$1'.
 module_statement -> prep_import '(' atom ')' : { constant, line_of('$1'), "-import(" ++ list_value_of('$3') ++ ")." }.

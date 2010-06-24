@@ -4,7 +4,7 @@
 %Treat ',' and '\n' as same concept (a separator).
 %Allow [,\n] at front of list terms
 
-fac
+fac/1
   (0) -> 1
   (N) when is_integer(N) and N>0 ->
     N * fac(N-1)
@@ -53,7 +53,7 @@ test_list_parts() ->
     3
     | A
   
-test_multi
+test_multi/3
   (0,0,0) ->
     1
   (A,B,C) ->

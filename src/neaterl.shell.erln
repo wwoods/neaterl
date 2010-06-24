@@ -38,7 +38,7 @@ run(Eval) ->
       run_text(Eval, Text)
       ?MODULE:run(Eval)
       
-run_text
+run_text/2
   (_Eval, T=[$-|_]) ->
     %Module level code
     case lists:prefix("-module", T) of
@@ -70,7 +70,7 @@ read_lines(Out, Index) ->
     Line == "\n" -> Out ++ [ Line ]
     true -> read_lines(Out ++ [ Line ], Index + 1)
   
-read_lines_module
+read_lines_module/3
   (Out, _Index, 2) ->
     Out
   (Out, Index, SeqBlanks) ->
@@ -123,7 +123,7 @@ shell_funs/3
       Args
     {value,shell_funs(Name, NewArgs),Bindings}
 
-shell_funs %/2
+shell_funs/2
   (c, [ File ]) ->
     shell_funs(c, [ File, [ verbose, report ] ])
   (c, [ File, Options ]) ->
