@@ -275,6 +275,7 @@ arg_parts_list2 -> expression line : [ '$1' ].
 arg_parts_list2 -> expression line arg_parts_list2 : [ '$1' ] ++ '$3'.
 
 func_def_body -> arg_list when_clause statement_block : { function_body, line_of('$1'), '$1', '$2', '$3' }.
+func_def_body -> tuple when_clause statement_block : { function_body, line_of('$1'), { arg_list, line_of('$1'), [ '$1' ] }, '$2', '$3' }.
 
 when_clause -> '->' : { 'when', line_of('$1'), nil }.
 when_clause -> 'when' guard_expression '->' : { 'when', line_of('$1'), '$2' }.
