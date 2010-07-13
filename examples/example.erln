@@ -11,6 +11,12 @@ fac/1
 
 -define(MOD(), 36)
 
+remainder(A, B) ->
+  A rem B
+  
+integer_divide(A, B) ->
+  A div B
+
 test/1
   (0) ->
     put(myatom, "hello world")

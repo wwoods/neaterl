@@ -92,6 +92,10 @@ try :
   {token,{'try',TokenLine,TokenChars}}.
 catch :
   {token,{'catch',TokenLine,TokenChars}}.
+div : 
+  {token,{'div',TokenLine,TokenChars}}.
+rem :
+  {token,{'rem',TokenLine,TokenChars}}.
 \"[^\\"]*(\\.([^\\"]*))*\" :
   %[_|H] = TokenChars
   %,J = element(1, lists:split(length(H) - 1, H))
@@ -112,10 +116,6 @@ catch :
   {token,{atom,TokenLine,TokenChars}}.
 [A-Z_][0-9a-zA-Z_]* :
   {token,{variable,TokenLine,TokenChars}}.
-div : 
-  {token,{'div',TokenLine,TokenChars}}.
-rem :
-  {token,{'rem',TokenLine,TokenChars}}.
 [\[\]\{\}\\+\-\*\/%\:\;\|\(\)!><=\.\,=\#] :
   [H|_]=TokenChars
   ,{token,{list_to_atom([H]),TokenLine,TokenChars}}.
