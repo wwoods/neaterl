@@ -26,7 +26,7 @@ func_def_body when_clause
 arg_list arg_parts_inline arg_parts_list arg_parts_list2
 guard_expression
 expression expression_atom uminus unot ucatch binary_op try_expr
-list tuple
+list tuple binary binary_parts_inline
 list_arg_parts_list list_arg_parts_list2
 func_call 
 anon_fun fun_clause_block fun_clause_line fun_clause_list
@@ -34,7 +34,7 @@ anon_fun fun_clause_block fun_clause_line fun_clause_list
 
 Terminals 
 '(' ')' '@' '[' ']' '{' '}' '+' '-' '/' '*' '.' '>' '<' '|' '#' 'div' 'rem'
-'->' '++' '--' '!' ':' ';' '=' '==' '>=' '=<'
+'->' '++' '--' '!' ':' ';' '=' '==' '>=' '=<' '<<' '>>'
 '/=' '=:=' '=/='
 line 'begin' 'end' ',' 'char_expr'
 atom float integer variable string macro
@@ -183,6 +183,7 @@ expression_atom -> string : constant_from('$1').
 expression_atom -> 'char_expr' : constant_from('$1').
 expression_atom -> list : '$1'.
 expression_atom -> tuple : '$1'.
+expression_atom -> binary : '$1'.
 expression_atom -> '(' expression ')' : { paren_expr, line_of('$1'), '$2' }.
 
 branch_block -> 'begin' branch_list 'end' : [ '$1' ] ++ '$2' ++ [ '$3' ].
@@ -311,6 +312,13 @@ list_arg_parts_list2 -> '|' expression line : [ { list_tail, '$2' } ].
 tuple -> '{' '}' : { tuple, line_of('$1'), [] }.
 tuple -> '{' arg_parts_inline '}' : { tuple, line_of('$1'), '$2' }.
 tuple -> '{' arg_parts_list : { tuple, line_of('$1'), '$2' }.
+
+binary -> '<<' '>>' : { binary, line_of('$1'), [], nil }.
+binary -> '<<' binary_parts_inline '>>' : { binary, line_of('$1'), '$2' }.
+
+binary_parts_inline -> expression_atom : [ '$1' ].
+binary_parts_inline -> expression_atom '/' atom : [ {encode_element, line_of('$1'), '$1', constant_from('$3')} ].
+binary_parts_inline -> binary_parts_inline ',' binary_parts_inline : '$1' ++ '$3'.
 
 Erlang code.
 constant_from({_,Line,Value}) ->

@@ -423,6 +423,12 @@ convert2({ list, Line, Args, Tail }, Next, State) ->
 convert2({ tuple, Line, Args }, Next, State) ->
   "{" ++ convert_stmts(", ", Args, State) ++ "}"
   ;
+convert2({ binary, Line, Args }, Next, State) ->
+  "<<" ++ convert_stmts(", ", Args, State) ++ ">>"
+  ;
+convert2({ encode_element, Line, Element, Encoding}, Next, State) ->
+  convert_stmts(Element, State) ++ "/" ++ convert_stmts(Encoding, State)
+  ;
 convert2({ paren_expr, Line, Expr }, Next, State) ->
   "(" ++ convert_stmts(Expr, State) ++ ")"
   ;

@@ -30,6 +30,10 @@ Rules.
   {token,{prep_import,TokenLine}}.
 -define :
   {token,{prep_define,TokenLine}}.
+<< :
+  {token,{'<<',TokenLine,TokenChars}}.
+>> :
+  {token,{'>>',TokenLine,TokenChars}}.
 -> :
   {token,{'->',TokenLine,TokenChars}}.
 == :

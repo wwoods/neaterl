@@ -16,6 +16,10 @@ remainder(A, B) ->
   
 integer_divide(A, B) ->
   A div B
+  
+binary() ->
+  <<"Hello"/utf8, 32, J>> = <<"Hello World!"/utf8>>
+  J = <<"World!"/utf8>>
 
 test/1
   (0) ->
