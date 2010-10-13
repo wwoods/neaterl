@@ -3,3 +3,4 @@
 *_yec.erl
 examples/*.erl
 examples/*.beam
+erl_crash.dump
