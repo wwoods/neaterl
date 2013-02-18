@@ -22,7 +22,7 @@
 -define(COMPILE_TEMP, "temp_neaterl.erl").
 
 shell() ->
-  neaterl.shell:run()
+  neaterl_shell:run()
   .
   
 make_all() ->

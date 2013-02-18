@@ -1,16 +1,6 @@
--module(neaterl.shell)
+-module(neaterl_shell)
 -export([run/0, eval/1 ])
 -export([init/0,run/1])
-
--import(io)
--import(io_lib)
--import(lists)
--import(erl_scan)
--import(erl_parse)
--import(erl_eval)
--import(compile)
--import(code)
--import(neaterl)
 
 %Walt Woods, 10 June 2010
 
